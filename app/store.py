@@ -258,7 +258,7 @@ class Store:
 
     # ── 轮询选择 ─────────────────────────────────────────────────────────────
     def select(self, provider: str, skip_ids: set[str] | None = None) -> Account | None:
-        """按 round-robin 选择下一个可用账号。用完 / 失效的自动跳过。"""
+        """按可用额度与轮询选择下一个可用账号。有可用额度的优先，用完/失效的自动跳过。"""
         skip_ids = skip_ids or set()
         now = time.time()
         with self._lock:
@@ -268,9 +268,22 @@ class Store:
             ]
             if not pool:
                 return None
-            idx = self._rotation.get(provider, 0) % len(pool)
-            account = pool[idx]
-            self._rotation[provider] = (idx + 1) % len(pool)
+
+            def _remaining_tokens(acc: Account) -> int:
+                total = 0
+                if acc.quota and isinstance(acc.quota, dict):
+                    for v in acc.quota.values():
+                        if isinstance(v, dict):
+                            total += int(v.get("remaining", 0) or 0)
+                return total
+
+            # 优先选择有剩余额度的账号
+            has_quota = [a for a in pool if _remaining_tokens(a) > 0]
+            candidates = has_quota if has_quota else pool
+
+            idx = self._rotation.get(provider, 0) % len(candidates)
+            account = candidates[idx]
+            self._rotation[provider] = (idx + 1) % len(candidates)
             return account
 
     # ── 导入 / 导出 ─────────────────────────────────────────────────────────

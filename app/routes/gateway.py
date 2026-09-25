@@ -56,6 +56,25 @@ def _detect_provider(body: dict, headers) -> str:
         return "bigmodel"
     if headers.get("x-provider") == "zai":
         return "zai"
+
+    def _total_quota(p: str) -> int:
+        total = 0
+        for a in store.list_accounts(p):
+            if a.is_selectable() and a.quota and isinstance(a.quota, dict):
+                for v in a.quota.values():
+                    if isinstance(v, dict):
+                        total += int(v.get("remaining", 0) or 0)
+        return total
+
+    zai_quota = _total_quota("zai")
+    bigmodel_quota = _total_quota("bigmodel")
+
+    # 优先选择拥有可用剩余额度的渠道
+    if bigmodel_quota > 0 and zai_quota <= 0:
+        return "bigmodel"
+    if zai_quota > 0 and bigmodel_quota <= 0:
+        return "zai"
+
     zai_available = any(a.is_selectable() for a in store.list_accounts("zai"))
     bigmodel_available = any(a.is_selectable() for a in store.list_accounts("bigmodel"))
     if not zai_available and bigmodel_available:
@@ -155,9 +174,13 @@ async def chat_completions(request: Request):
     for _ in range(max_attempts):
         account = store.select(provider, skip_ids=tried)
         if account is None:
-            break
+            # 自动跨提供商故障转移
+            alt_provider = "bigmodel" if provider == "zai" else "zai"
+            account = store.select(alt_provider, skip_ids=tried)
+            if account is None:
+                break
         tried.add(account.id)
-        needs_captcha = provider == "zai" and account.mode == "jwt"
+        needs_captcha = account.provider == "zai" and account.mode == "jwt"
 
         result = await _try_account(
             req_id, account, body, payload, incoming_headers, port, needs_captcha,
@@ -197,9 +220,13 @@ async def messages(request: Request):
     for _ in range(max_attempts):
         account = store.select(provider, skip_ids=tried)
         if account is None:
-            break
+            # 自动跨提供商故障转移
+            alt_provider = "bigmodel" if provider == "zai" else "zai"
+            account = store.select(alt_provider, skip_ids=tried)
+            if account is None:
+                break
         tried.add(account.id)
-        needs_captcha = provider == "zai" and account.mode == "jwt"
+        needs_captcha = account.provider == "zai" and account.mode == "jwt"
 
         result = await _try_account(req_id, account, body, payload, incoming_headers, port, needs_captcha)
         if result is _NEXT_ACCOUNT:
