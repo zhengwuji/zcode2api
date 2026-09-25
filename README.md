@@ -25,7 +25,8 @@
   * **Anthropic 兼容端点**：`/v1/messages`，原生支持 Claude 客户端、Cline、Roo Code 及 Claude Code。
 * 🔀 **多账号智能轮询与无感自动切号 (`auto_switch`)**：
   * 多个账号通过 Round-Robin 算法自动负载均衡。
-  * 遇到账号额度耗尽（HTTP 402/提示 balance exhaust）、上游限流（429）或凭证失效时，网关在**同一次请求中自动无感故障转移**到下一个可用账号，调用绝不中断。
+  * **额度优先调度 (Active Quota Priority)**：智能感知账号池各账号实时配额，优先调度有充足可用额度的健康账号，自动后置耗尽账号。
+  * **跨平台故障转移 (Cross-Provider Failover)**：遇到账号额度耗尽（HTTP 402/balance exhaust）、上游限流（429）或凭证失效时，在**同一次请求中自动无感转移**至下一个可用账号，并支持 Z.AI 与 智谱 BigModel 跨渠道自动容灾，调用绝不中断。
 * 🎁 **套餐资格刷新与自动领取 (`auto_claim`)**：
   * 深度参考 Z-Accounts 核心原理，提供 **「刷新资格」** 接口，一键并发探测账号池中所有账号在官方当前可领取的体验套餐包（如 Start Plan 3M/5M 配额）。
   * 开启 **「自动领取」** 后，后台监控或新账号入池时会自动求解人机验证并抢领免费方案，彻底告别手动续期。
@@ -39,8 +40,9 @@
 * 🔑 **网关 API Key 随机生成与灵活管理**：
   * 系统首次启动默认随机生成安全密钥（`sk-zcode2api-...`），彻底满足 Cherry Studio、NextChat、Cursor 等客户端的 API Key 必填校验，避免客户端报错 `No API key for provider`。
   * 后台「API 反代接入说明」弹窗与「设置」页面均提供 **【一键复制】**、**【自定义修改保存】** 与 **【随机重新生成】** 按钮，随时调整，即时持久化生效。
-* 🖥️ **清新现代的管理后台**：
-  * 提供卡片化 Web 后台，支持 OAuth 一键授权登录导入、批量凭证粘贴、JSON 导入导出、一键开关自动切号与自动领取。
+* 🖥️ **Windows 双模式极速运行支持**：
+  * **模式 A（Web 多账号网关集群）**：运行 `start.bat`，启动完整 FastAPI 集群后端，提供可视化 Web 管理界面与多账号轮询调度（默认端口 `3335`）。
+  * **模式 B（单账号交互控制台）**：运行 `start_proxy.bat`，启动基于 `zcode-proxy` 的轻量交互控制台（端口 `8080`），支持 OAuth 一键登录、粘贴 URL、额度详细看板与套餐领取。
 * ⚡ **极速开箱与防端口冲突**：
   * Windows 内置 `start.bat` / `start.ps1` 与 `stop.bat` / `stop.ps1`，自动检测端口占用并智能递增顺延，双击即可直接运行。
 
@@ -50,10 +52,17 @@
 
 ### 方式一：Windows 一键运行（推荐）
 
+#### 选项 A：启动 Web 多账号网关集群服务（推荐）
 1. 确保电脑已安装 [Python 3.10+](https://www.python.org/) 和 [Node.js 18+](https://nodejs.org/)。
 2. 双击运行根目录下的 **`start.bat`**。
    * 脚本会自动初始化虚拟环境、安装依赖、检查端口占用（默认 `3335`，被占用则自动顺延）并启动后台服务。
+   * 打开浏览器访问 `http://localhost:3335/admin`（默认管理密码：`zcode`）。
    * 如需停止服务，双击运行 **`stop.bat`** 即可。
+
+#### 选项 B：启动交互控制台代理（个人单账号极简模式）
+1. 双击运行根目录下的 **`start_proxy.bat`**。
+   * 启动即呈现交互菜单，直接回车即可在 `http://127.0.0.1:8080` 启动单账号代理服务。
+   * 控制台支持：[2/3] 智谱/Z.AI 浏览器一键授权登录、[4] 导入本地配置、[6] 查看当前账号详细额度看板、[8] 抢领体验套餐、[9] 一键清理端口占用等功能。
 
 ### 方式二：手动命令行启动 (Windows / Linux / macOS)
 
@@ -206,10 +215,15 @@ docker run -d --name zcode2api \
 │   ├── logs.py            # 格式化彩色日志输出
 │   ├── routes/            # API 路由：gateway / admin_api / pages
 │   └── statics/           # 前端样式、JS 逻辑与后台页面 (accounts.html 等)
+├── proxy/                 # 单账号交互代理模块（基于 zcode-proxy）
+│   ├── config.yaml        # 代理服务配置文件
+│   ├── account_info.py    # 本地解密凭据与实时额度看板查询脚本
+│   └── zcode-proxy.exe    # 代理网关核心组件
 ├── captcha_node/          # 无浏览器无痕验证求解器（Node + jsdom）
 ├── main.py                # CLI 入口与服务启动调度
-├── start.bat / start.ps1  # Windows 一键启动脚本（含端口碰撞自增）
+├── start.bat / start.ps1  # Windows Web 多账号集群一键启动脚本
 ├── stop.bat / stop.ps1    # Windows 一键停止脚本
+├── start_proxy.bat        # Windows 单账号交互控制台代理启动脚本
 ├── requirements.txt       # Python 依赖清单
 ├── Dockerfile             # 容器镜像构建文件
 ├── docker-compose.yml     # Compose 编排文件
