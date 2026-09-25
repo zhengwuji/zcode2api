@@ -95,6 +95,12 @@ class Store:
                     account = Account.from_dict(json.loads(row["data"]))
                 except (json.JSONDecodeError, TypeError):
                     continue
+                # 兼容修正历史存量中把 JWT 识别为 apiKey 的情况
+                if account.secret and account.secret.count(".") == 2 and account.mode != "jwt":
+                    account.mode = "jwt"
+                    account.jwt_token = account.secret
+                    account.api_key = None
+                    self._persist_account(account)
                 if account.provider in self._accounts:
                     self._accounts[account.provider].append(account)
 
@@ -153,6 +159,18 @@ class Store:
             return max(0, int(self.get_setting("quota_refresh_interval", settings.QUOTA_REFRESH_INTERVAL)))
         except (TypeError, ValueError):
             return settings.QUOTA_REFRESH_INTERVAL
+
+    def auto_claim(self) -> bool:
+        return self.get_setting("auto_claim", "true").lower() in ("true", "1", "yes")
+
+    def set_auto_claim(self, enabled: bool) -> None:
+        self.set_setting("auto_claim", "true" if enabled else "false")
+
+    def auto_switch(self) -> bool:
+        return self.get_setting("auto_switch", "true").lower() in ("true", "1", "yes")
+
+    def set_auto_switch(self, enabled: bool) -> None:
+        self.set_setting("auto_switch", "true" if enabled else "false")
 
     # ── 账号读取 ─────────────────────────────────────────────────────────────
     def list_accounts(self, provider: str | None = None) -> list[Account]:

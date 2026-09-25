@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import socket
 import sys
 import time
 
@@ -42,31 +44,85 @@ def usage() -> None:
 
 
 # ── serve ────────────────────────────────────────────────────────────────────
+def _is_port_in_use(port: int, host: str = "0.0.0.0") -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+            return False
+        except OSError:
+            return True
+
+
+def _find_available_port(start_port: int, host: str = "0.0.0.0", max_attempts: int = 100) -> int:
+    for p in range(start_port, start_port + max_attempts):
+        if not _is_port_in_use(p, host):
+            return p
+    return start_port
+
+
 def cmd_serve(args: list[str]) -> None:
     port = settings.PORT
     if "--port" in args:
         i = args.index("--port")
         if i + 1 < len(args):
             port = int(args[i + 1])
+
+    if _is_port_in_use(port, host=settings.HOST):
+        new_port = _find_available_port(port + 1, host=settings.HOST)
+        print(c(f"[!] 端口 {port} 已被占用，自动查找并切换到可用端口: {new_port}", "yellow"))
+        port = new_port
+    else:
+        print(c(f"[*] 端口 {port} 检查通过 (可用)", "green"))
+
     settings.PORT = port
+
+    import atexit
+    pid_file = settings.ROOT_DIR / "zcode2api.pid"
+    port_file = settings.ROOT_DIR / "zcode2api.port"
+
+    try:
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+        port_file.write_text(str(port), encoding="utf-8")
+    except Exception:
+        pass
+
+    def cleanup() -> None:
+        try:
+            if pid_file.exists():
+                pid_file.unlink()
+            if port_file.exists():
+                port_file.unlink()
+        except Exception:
+            pass
+
+    atexit.register(cleanup)
+
     import uvicorn
 
-    uvicorn.run("app.main:app", host=settings.HOST, port=port, log_level="info")
+    try:
+        uvicorn.run("app.main:app", host=settings.HOST, port=port, log_level="info")
+    finally:
+        cleanup()
 
 
 # ── login ────────────────────────────────────────────────────────────────────
 async def cmd_login(args: list[str]) -> None:
-    if not args or args[0] != "zai":
-        print(c("目前仅支持: python cli.py login zai", "red"))
+    provider = "zai"
+    if args and args[0] in ("zai", "bigmodel"):
+        provider = args[0]
+    elif args and args[0] not in ("zai", "bigmodel"):
+        print(c("支持的平台: python main.py login zai 或 python main.py login bigmodel", "red"))
         return
-    flow = ZaiAuthFlow()
+
+    pname = "BigModel（智谱开放平台）" if provider == "bigmodel" else "z.ai（国际站）"
+    flow = ZaiAuthFlow(provider=provider)
     try:
         flow_id, authorize_url = await flow.init()
     except Exception as err:  # noqa: BLE001
-        print(c(f"❌ 登录初始化失败: {err}", "red"))
+        print(c(f"❌ 登录初始化失败 [{pname}]: {err}", "red"))
         return
 
-    print(c("\n✔ OAuth 初始化成功！请在浏览器中打开下面链接完成授权：", "green"))
+    print(c(f"\n✔ OAuth 初始化成功 [{pname}]！请在浏览器中打开下面链接完成授权：", "green"))
     print(c(authorize_url, "blue"))
 
     if "--no-browser" not in args:
@@ -76,7 +132,7 @@ async def cmd_login(args: list[str]) -> None:
         except Exception:  # noqa: BLE001
             pass
 
-    print("正在等待授权...")
+    print(f"正在等待 [{pname}] 授权...")
     for _ in range(100):
         await asyncio.sleep(2)
         try:
@@ -85,15 +141,16 @@ async def cmd_login(args: list[str]) -> None:
             continue
         status = data.get("status")
         if status == "ready":
-            access_token = (data.get("zai") or {}).get("access_token")
+            access_token = (data.get(provider) or data.get("zai") or data.get("bigmodel") or {}).get("access_token")
             zcode_jwt = data.get("token")
+            account_prefix = f"oauth-{provider}"
             if zcode_jwt:
-                acc = store.add_account("zai", "oauth-login", zcode_jwt)
+                acc = store.add_account(provider, account_prefix, zcode_jwt)
                 print(c(f"\n✔ 已保存 Coding Plan JWT 账号: {acc.name} ({acc.id})", "green"))
             if access_token:
                 try:
                     key = await flow.exchange_api_key(access_token)
-                    store.add_account("zai", "oauth-apikey", key)
+                    store.add_account(provider, account_prefix, key)
                     print(c(f"✔ 已兑换并保存 API Key: {key[:8]}...", "green"))
                 except Exception as err:  # noqa: BLE001
                     print(c(f"⚠️ 兑换 API Key 失败: {err}", "yellow"))

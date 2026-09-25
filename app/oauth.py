@@ -11,8 +11,9 @@ import httpx
 
 
 class ZaiAuthFlow:
-    def __init__(self, api_base: str = "https://zcode.z.ai/api/v1") -> None:
+    def __init__(self, api_base: str = "https://zcode.z.ai/api/v1", provider: str = "zai") -> None:
         self.api_base = api_base
+        self.provider = provider
         self.poll_token = secrets.token_hex(32)
 
     async def init(self) -> tuple[str, str]:
@@ -23,7 +24,7 @@ class ZaiAuthFlow:
                     "Authorization": f"Bearer {self.poll_token}",
                     "Content-Type": "application/json",
                 },
-                json={"provider": "zai"},
+                json={"provider": self.provider},
             )
         res.raise_for_status()
         data = res.json().get("data") or {}
@@ -43,6 +44,9 @@ class ZaiAuthFlow:
 
     async def exchange_api_key(self, access_token: str) -> str:
         """OAuth access_token → 业务 token → 机构/项目 → API Key。"""
+        if self.provider == "bigmodel":
+            # BigModel 当前主要使用 Coding Plan Token (JWT)
+            return ""
         async with httpx.AsyncClient(timeout=30) as client:
             login = await client.post(
                 "https://api.z.ai/api/auth/z/login",

@@ -17,7 +17,20 @@
       <div class="page-sub">多账号轮询 · 额度用完自动切换下一个账号 · 实时用量监控</div>
     </div>
     <div class="page-actions">
-      <span class="live-dot" id="live-dot">实时监控中</span>
+      <div class="toolbar-switch" id="toggle-switch" onclick="toggleAutoSwitch()" title="失败或额度用尽时自动切换下一个有效账号">
+        <span class="switch-indicator"></span>自动切号
+      </div>
+      <div class="toolbar-switch" id="toggle-claim" onclick="toggleAutoClaim()" title="定时监控或额度耗尽时自动检测并领取免费/体验套餐">
+        <span class="switch-indicator"></span>自动领取
+      </div>
+      <button onclick="refreshClaimAll()" class="page-action-btn" title="检测全部账号的套餐资格与待领取包">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+        刷新资格
+      </button>
+      <button onclick="openApiGuide()" class="page-action-btn" style="border-color:#6366f1;color:#4f46e5;background:#f5f3ff" title="查看在其它 AI 软件中的反代接入配置">
+        <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        API 反代接入
+      </button>
       <button onclick="openImport()" class="page-action-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         导入
@@ -87,7 +100,10 @@
         </div>
         <div class="dialog-field">
           <span class="dialog-label">提供商</span>
-          <select class="input" id="add-provider"><option value="zai">Z.AI (Coding Plan)</option><option value="bigmodel">BigModel</option></select>
+          <select class="input" id="add-provider">
+            <option value="bigmodel">BigModel（智谱开放平台）</option>
+            <option value="zai">z.ai（国际站）</option>
+          </select>
         </div>
       </div>
       <div class="dialog-actions">
@@ -99,12 +115,26 @@
     <!-- 授权登录 -->
     <div id="add-pane-login" style="display:none">
       <div class="dialog-body">
-        <div class="dialog-help">通过 Z.AI 官方 OAuth 授权登录，授权成功后自动导入到账号池（含 Coding Plan 额度）。</div>
-        <div id="login-idle">
-          <button onclick="startLogin()" id="login-start-btn" class="dialog-btn dialog-btn-primary w-full" style="height:40px">开始登录</button>
+        <div class="dialog-help" id="login-tip">请选择授权登录的平台，授权成功后将自动导入到账号池：</div>
+        <div id="login-idle" class="oauth-provider-list">
+          <button type="button" class="oauth-provider-item" onclick="startLogin('bigmodel')">
+            <span class="oauth-provider-name">BigModel（智谱开放平台）</span>
+            <span class="oauth-provider-arrow">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </span>
+          </button>
+          <button type="button" class="oauth-provider-item" onclick="startLogin('zai')">
+            <span class="oauth-provider-name">z.ai（国际站）</span>
+            <span class="oauth-provider-arrow">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </span>
+          </button>
         </div>
         <div id="login-active" style="display:none">
-          <div class="dialog-help" style="margin-bottom:6px">请在浏览器中打开下面链接完成授权：</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div class="dialog-help" id="login-active-title">请在浏览器中打开下面链接完成授权：</div>
+            <a href="javascript:void(0)" onclick="resetLoginPane()" style="font-size:12px;color:var(--fg-muted);text-decoration:underline">重新选择平台</a>
+          </div>
           <div style="display:flex;gap:8px;align-items:center">
             <input class="input" id="login-url" readonly style="font-size:12px">
             <button onclick="copyLoginUrl()" class="dialog-btn">复制</button>
@@ -147,6 +177,91 @@
   </div>
 </div>
 
+<!-- Claim modal -->
+<div class="modal-overlay" id="modal-claim">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-title">账号资格检测与套餐领取</div>
+    <div class="dialog-body">
+      <div id="claim-acc-info" style="font-size:13px;color:#555;margin-bottom:6px"></div>
+      <div id="claim-loading" style="padding:20px;text-align:center;color:#666">
+        <div class="live-dot">正在查询可用套餐资格…</div>
+      </div>
+      <div id="claim-content" style="display:none">
+        <div class="dialog-help" style="margin-bottom:8px">检测到的可领取套餐包：</div>
+        <div id="claim-plans-list" style="display:grid;gap:8px;max-height:260px;overflow-y:auto"></div>
+      </div>
+      <div id="claim-empty" style="display:none;padding:16px;text-align:center;font-size:13px;color:#888;background:#f9f9f9;border-radius:8px">
+        暂无待领取的套餐（当前方案可能尚未到期或暂无可用资格）
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button onclick="closeModal('modal-claim')" class="dialog-btn">关闭</button>
+      <button id="btn-do-claim" onclick="doSubmitClaim()" class="dialog-btn dialog-btn-primary" style="display:none">一键领取此方案</button>
+    </div>
+  </div>
+</div>
+
+<!-- API Guide modal -->
+<div class="modal-overlay" id="modal-api-guide">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>API 反代接入说明 (支持任意 AI 客户端)</span>
+      <span class="badge badge-active">已兼容 OpenAI + Claude</span>
+    </div>
+    <div class="dialog-body" style="max-height:75vh;overflow-y:auto;padding-right:4px">
+      <div class="dialog-help">
+        zcode2api 提供标准的 OpenAI 与 Anthropic 兼容反向代理。可在 Cherry Studio、NextChat、Cursor、Chatbox、One-API、New API、LobeChat、VSCode 插件等工具中直接配置使用：
+      </div>
+
+      <div class="guide-card">
+        <div class="guide-field">
+          <span class="guide-label">OpenAI Base URL</span>
+          <div class="guide-val-wrap">
+            <span class="guide-val" id="guide-openai-url"></span>
+            <button class="guide-copy-btn" onclick="copyText(document.getElementById('guide-openai-url').textContent)">复制</button>
+          </div>
+        </div>
+        <div class="guide-field">
+          <span class="guide-label">Claude Base URL</span>
+          <div class="guide-val-wrap">
+            <span class="guide-val" id="guide-anthropic-url"></span>
+            <button class="guide-copy-btn" onclick="copyText(document.getElementById('guide-anthropic-url').textContent)">复制</button>
+          </div>
+        </div>
+        <div class="guide-field">
+          <span class="guide-label">网关密钥 (API Key)</span>
+          <div class="guide-val-wrap">
+            <span class="guide-val" id="guide-api-key"></span>
+            <button class="guide-copy-btn" onclick="copyText(document.getElementById('guide-api-key').textContent)">复制</button>
+          </div>
+        </div>
+        <div class="guide-field">
+          <span class="guide-label">推荐模型名称</span>
+          <div class="guide-val-wrap">
+            <span class="guide-val">GLM-5.3, GLM-5.3-Flash, GLM-5.2, GLM-5-Turbo</span>
+            <button class="guide-copy-btn" onclick="copyText('GLM-5.3')">复制GLM-5.3</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;margin:6px 0 4px">常见客户端配置指南：</div>
+      <div style="font-size:12px;color:#444;line-height:1.6;display:grid;gap:6px">
+        <div><b>1. Cherry Studio：</b>设置 → 模型服务商 → 添加自定义 (OpenAI 协议) → API 域名填上方 <code>OpenAI Base URL</code>，API Key 填网关密钥，添加模型 <code>GLM-5.3</code> 即可。</div>
+        <div><b>2. NextChat (ChatGPT-Next-Web)：</b>设置 → 接口地址填上方 <code>OpenAI Base URL</code>，API Key 填网关密钥，自定义模型增加 <code>+GLM-5.3</code>。</div>
+        <div><b>3. Cursor：</b>Settings → Models → OpenAI API Key → Override Base URL 填上方 <code>OpenAI Base URL</code>，并新增模型名 <code>GLM-5.3</code>。</div>
+        <div><b>4. One-API / New API：</b>添加渠道 → 类型选 <code>OpenAI</code>，Base URL 填 <code>http://127.0.0.1:端口</code>，密钥填网关密钥，模型填 <code>GLM-5.3,GLM-5.3-Flash</code>。</div>
+        <div><b>5. Claude Code / Cline / Roo Code：</b>提供商选择 <code>Anthropic 兼容</code>，Base URL 填上方 <code>Claude Base URL</code>。</div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;margin:10px 0 4px">cURL 测试命令：</div>
+      <div class="code-preview" id="guide-curl-example"></div>
+    </div>
+    <div class="dialog-actions">
+      <button onclick="closeModal('modal-api-guide')" class="dialog-btn dialog-btn-primary">知道了</button>
+    </div>
+  </div>
+</div>
+
 <input type="file" id="import-file" accept=".json" style="display:none" onchange="onImportFile(event)">
 
 <script src="/static/js/auth.js?v={{APP_VERSION}}"></script>
@@ -154,6 +269,7 @@
 <script src="/static/js/header.js?v={{APP_VERSION}}"></script>
 <script>
 let allAccounts=[], curFilter='all', _cb=null, _editId='', _timer=null;
+let currentGatewayKey='', _claimAccId='', _selectedPlanId='';
 const refreshing=new Set();
 
 const STATUS_LABEL={active:'正常',exhausted:'用完',cooling:'限流',invalid:'异常',disabled:'禁用'};
@@ -162,6 +278,7 @@ const STATUS_LABEL={active:'正常',exhausted:'用完',cooling:'限流',invalid:
   await renderAdminHeader();
   const key=await adminKey.get();
   if(!key||!await verifyKey(ADMIN_API+'/verify',key).catch(()=>false))return location.href='/admin/login';
+  await loadSettings();
   await load();
   startPolling();
 })();
@@ -171,6 +288,50 @@ function startPolling(){
   _timer=setInterval(()=>{ if(!document.hidden && !anyModalOpen()) load(true); },5000);
 }
 function anyModalOpen(){return!!document.querySelector('.modal-overlay.open');}
+
+async function loadSettings(){
+  try{
+    const s=await api('GET','/settings');
+    currentGatewayKey=s.gateway_key||'';
+    const sw=document.getElementById('toggle-switch');
+    if(sw)sw.classList.toggle('is-active',!!s.auto_switch);
+    const cl=document.getElementById('toggle-claim');
+    if(cl)cl.classList.toggle('is-active',!!s.auto_claim);
+  }catch(e){}
+}
+
+async function toggleAutoSwitch(){
+  const sw=document.getElementById('toggle-switch');
+  const nowActive=!sw.classList.contains('is-active');
+  try{
+    await api('PUT','/settings',{auto_switch:nowActive});
+    sw.classList.toggle('is-active',nowActive);
+    showToast(nowActive?'已开启自动切号（额度耗尽/失败自动故障转移）':'已关闭自动切号','info');
+  }catch(e){showToast('设置失败: '+e.message,'error');}
+}
+
+async function toggleAutoClaim(){
+  const cl=document.getElementById('toggle-claim');
+  const nowActive=!cl.classList.contains('is-active');
+  try{
+    await api('PUT','/settings',{auto_claim:nowActive});
+    cl.classList.toggle('is-active',nowActive);
+    showToast(nowActive?'已开启自动领取（后台自动检测并领取体验包）':'已关闭自动领取','info');
+  }catch(e){showToast('设置失败: '+e.message,'error');}
+}
+
+async function refreshClaimAll(){
+  showToast('正在检测全部账号套餐资格…','info');
+  try{
+    const d=await api('POST','/claim/refresh-all');
+    if(d.auto_claimed){
+      showToast(`已自动检测并尝试领取 ${d.count} 个账号`,'success');
+    }else{
+      showToast(`已完成 ${d.count} 个账号的资格检测`,'success');
+    }
+    load();
+  }catch(e){showToast('检测失败: '+e.message,'error');}
+}
 
 async function load(silent){
   try{
@@ -212,11 +373,12 @@ function renderTable(){
 
 function rowHtml(a){
   const isJwt=a.mode==='jwt';
+  const canRefresh=isJwt||(a.provider==='bigmodel'&&a.api_key);
   const isDisabled=a.status==='disabled';
   const loading=refreshing.has(a.id);
   return `<tr>
     <td><span class="tok">${esc(a.token_masked)}</span><div style="font-size:11px;color:#aaa;margin-top:2px">${esc(a.name)}</div></td>
-    <td class="table-center">${a.provider}</td>
+    <td class="table-center">${a.provider === 'bigmodel' ? '<span class="badge" style="background:#f5f3ff;color:#6d28d9">BigModel (国内)</span>' : '<span class="badge" style="background:#f0fdf4;color:#15803d">z.ai (国际)</span>'}</td>
     <td class="table-center"><span class="badge badge-${a.mode}">${isJwt?'JWT':'Key'}</span></td>
     <td class="table-center"><span class="badge badge-${a.status}">${STATUS_LABEL[a.status]||a.status}</span></td>
     <td>${quotaCell(a)}</td>
@@ -224,7 +386,8 @@ function rowHtml(a){
     <td class="table-center" style="color:#9a9a9a">${a.fail_count||0}</td>
     <td style="font-size:12px;color:#9a9a9a">${fmtDate(a.last_used_at)}</td>
     <td><div class="row-actions">
-      ${isJwt?`<button onclick="refreshOne('${a.id}')" class="row-icon-btn${loading?' is-loading':''}" title="刷新额度"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button>`:''}
+      ${canRefresh?`<button onclick="refreshOne('${a.id}')" class="row-icon-btn${loading?' is-loading':''}" title="刷新额度"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button>`:''}
+      ${isJwt?`<button onclick="openClaimModal('${a.id}')" class="row-icon-btn" title="检测资格与领取套餐"><svg viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></button>`:''}
       <button onclick="toggleEnabled('${a.id}',${isDisabled})" class="row-icon-btn" title="${isDisabled?'恢复':'禁用'}">
         ${isDisabled?'<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 4v5h5"/></svg>':'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M8.5 8.5 15.5 15.5"/></svg>'}
       </button>
@@ -237,19 +400,155 @@ function rowHtml(a){
 function quotaCell(a){
   const q=a.quota||{};
   const keys=Object.keys(q);
-  if(!keys.length)return a.mode==='jwt'?'<span class="quota-empty">未获取</span>':'<span class="quota-empty">—</span>';
-  return '<div class="quota-rows">'+keys.map(k=>{
-    const w=q[k]||{};const rem=Number(w.remaining)||0,tot=Number(w.total)||0;
-    const pct=tot>0?Math.max(0,Math.min(100,Math.round(rem/tot*100))):0;
-    const color=rem<=0?'#c9c9cf':(pct<15?'#b0632a':'#4c9168');
-    return `<div class="quota-row">
-      <span class="quota-row-name">${esc(shortModel(k))}</span>
-      <span class="quota-row-track"><span class="quota-row-fill" style="width:${pct}%;background:${color}"></span></span>
-      <span class="quota-row-val">${fmt(rem)} / ${fmt(tot)}</span>
+  if(keys.length){
+    return '<div class="quota-rows">'+keys.map(k=>{
+      const w=q[k]||{};const rem=Number(w.remaining)||0,tot=Number(w.total)||0;
+      const pct=tot>0?Math.max(0,Math.min(100,Math.round(rem/tot*100))):0;
+      const color=rem<=0?'#c9c9cf':(pct<15?'#b0632a':'#4c9168');
+      return `<div class="quota-row">
+        <span class="quota-row-name">${esc(shortModel(k))}</span>
+        <span class="quota-row-track"><span class="quota-row-fill" style="width:${pct}%;background:${color}"></span></span>
+        <span class="quota-row-val">${fmt(rem)} / ${fmt(tot)}</span>
+      </div>`;
+    }).join('')+'</div>';
+  }
+
+  // 没有额度时：详细列出原因并给出指引操作
+  const isJwt=a.mode==='jwt';
+  const err=a.last_error||'';
+  if(a.mode==='apiKey'){
+    return `<div class="quota-reason-box is-info" title="API Key 模式可直接转发调用，无官方额度明细接口"><span class="quota-reason-text">Key 模式（可直接调用）</span></div>`;
+  }
+  if(err.includes('未开通') || err.includes('未领取') || !a.plan || !Object.keys(a.plan).length){
+    return `<div class="quota-reason-box is-warn" title="${esc(err||'未激活套餐')}">
+      <span class="quota-reason-text">${esc(err||'未开通方案（未领套餐）')}</span>
+      ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">去领取</span>`:''}
     </div>`;
-  }).join('')+'</div>';
+  }
+  if(err.includes('失效') || err.includes('401') || err.includes('403')){
+    return `<div class="quota-reason-box" title="${esc(err)}"><span class="quota-reason-text">${esc(err)}</span></div>`;
+  }
+  if(err.includes('用完') || err.includes('0 剩余') || a.status==='exhausted'){
+    return `<div class="quota-reason-box is-muted" title="${esc(err||'额度已用完')}">
+      <span class="quota-reason-text">额度已用完 (0 剩余)</span>
+      ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">刷新资格</span>`:''}
+    </div>`;
+  }
+  if(err){
+    return `<div class="quota-reason-box is-muted" title="${esc(err)}">
+      <span class="quota-reason-text">${esc(err)}</span>
+      ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">查资格</span>`:''}
+    </div>`;
+  }
+  return `<div class="quota-reason-box is-muted" title="未获取到额度数据">
+    <span class="quota-reason-text">未获取到额度</span>
+    ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">查资格</span>`:''}
+  </div>`;
 }
-function shortModel(n){return String(n).replace(/^GLM[- ]?/i,'GLM-').slice(0,10)||n;}
+function shortModel(n){return String(n).replace(/^GLM[- _]?/i,'').slice(0,12)||n;}
+
+/* ── 资格检测与领取套餐 ── */
+async function openClaimModal(id){
+  const a=allAccounts.find(x=>x.id===id);
+  if(!a)return;
+  _claimAccId=id;
+  _selectedPlanId='';
+  document.getElementById('claim-acc-info').textContent=`正在为账号「${a.name}」(${a.token_masked}) 查询资格…`;
+  document.getElementById('claim-loading').style.display='';
+  document.getElementById('claim-content').style.display='none';
+  document.getElementById('claim-empty').style.display='none';
+  document.getElementById('btn-do-claim').style.display='none';
+  openModal('modal-claim');
+
+  try{
+    const d=await api('POST',`/accounts/${id}/claim/preview`);
+    document.getElementById('claim-loading').style.display='none';
+    const plans=d.plans||[];
+    if(d.ok && plans.length){
+      document.getElementById('claim-content').style.display='';
+      const listEl=document.getElementById('claim-plans-list');
+      listEl.innerHTML=plans.map((p, idx)=>{
+        const isFirst=idx===0;
+        if(isFirst)_selectedPlanId=p.plan_id;
+        const entStr=(p.entitlements||[]).map(e=>`${e.show_name||e.meter}: ${fmt(e.grant_units)}`).join(' · ');
+        return `<div class="guide-card" style="cursor:pointer;border-color:${isFirst?'#111':'#e5e5e5'}" onclick="selectPlanItem(this, '${p.plan_id}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-weight:700;font-size:13px">${esc(p.name||p.plan_id)}</span>
+            <span class="badge badge-active">${esc(p.status||'可领取')}</span>
+          </div>
+          <div style="font-size:12px;color:#555;margin-bottom:4px">包含配额: ${esc(entStr||'体验配额')}</div>
+          <div style="font-size:11px;color:#888">方案 ID: <code>${esc(p.plan_id)}</code></div>
+        </div>`;
+      }).join('');
+      document.getElementById('btn-do-claim').style.display='';
+    }else{
+      document.getElementById('claim-empty').style.display='';
+      document.getElementById('claim-empty').textContent=d.message||'暂无待领取的套餐（当前方案未到期或官方未下发新资格）';
+    }
+  }catch(e){
+    document.getElementById('claim-loading').style.display='none';
+    document.getElementById('claim-empty').style.display='';
+    document.getElementById('claim-empty').textContent='查询资格失败: '+e.message;
+  }
+}
+
+function selectPlanItem(el, planId){
+  _selectedPlanId=planId;
+  const cards=document.querySelectorAll('#claim-plans-list .guide-card');
+  cards.forEach(c=>c.style.borderColor='#e5e5e5');
+  el.style.borderColor='#111';
+}
+
+async function doSubmitClaim(){
+  if(!_claimAccId)return;
+  const btn=document.getElementById('btn-do-claim');
+  btn.textContent='正在求解验证码并领取…';
+  btn.disabled=true;
+  try{
+    const d=await api('POST',`/accounts/${_claimAccId}/claim/submit`,{plan_id:_selectedPlanId});
+    if(d.ok){
+      showToast('🎉 套餐领取成功！额度已更新','success');
+      closeModal('modal-claim');
+      await load();
+    }else{
+      showToast('领取失败: '+(d.message||'未知错误'),'error');
+    }
+  }catch(e){
+    showToast('提交失败: '+e.message,'error');
+  }finally{
+    btn.textContent='一键领取此方案';
+    btn.disabled=false;
+  }
+}
+
+/* ── API 反代接入指南 ── */
+function openApiGuide(){
+  const origin=location.origin;
+  const openaiUrl=origin+'/v1';
+  const anthropicUrl=origin;
+  const key=currentGatewayKey||'sk-zcode2api-gateway';
+
+  document.getElementById('guide-openai-url').textContent=openaiUrl;
+  document.getElementById('guide-anthropic-url').textContent=anthropicUrl;
+  document.getElementById('guide-api-key').textContent=currentGatewayKey?currentGatewayKey:'(当前未设置密钥，任意字符均可)';
+
+  const curlCode=`curl -X POST "${openaiUrl}/chat/completions" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${key}" \\
+  -d '{
+    "model": "GLM-5.3",
+    "messages": [{"role": "user", "content": "你好，请自我介绍！"}],
+    "stream": true
+  }'`;
+  document.getElementById('guide-curl-example').textContent=curlCode;
+  openModal('modal-api-guide');
+}
+
+function copyText(str){
+  navigator.clipboard.writeText(str)
+    .then(()=>showToast('已复制到剪贴板','success'))
+    .catch(()=>showToast('复制失败，请手动选取复制','error'));
+}
 
 /* ── Actions ── */
 function openAdd(){
@@ -280,31 +579,33 @@ function switchAddTab(tab){
   document.getElementById('add-pane-login').style.display=tab==='login'?'':'none';
   if(tab!=='login')stopLoginPoll();
 }
+const PROVIDER_NAMES = {
+  'bigmodel': 'BigModel（智谱开放平台）',
+  'zai': 'z.ai（国际站）'
+};
 function resetLoginPane(){
   stopLoginPoll();
   _loginUrl='';
   document.getElementById('login-idle').style.display='';
   document.getElementById('login-active').style.display='none';
-  document.getElementById('login-start-btn').disabled=false;
 }
-async function startLogin(){
-  const btn=document.getElementById('login-start-btn');
-  btn.disabled=true;
+async function startLogin(provider='bigmodel'){
+  const pName = PROVIDER_NAMES[provider] || provider;
   try{
-    const d=await api('POST','/login/start');
+    const d=await api('POST','/login/start',{provider});
     _loginUrl=d.authorize_url;
     document.getElementById('login-url').value=_loginUrl;
+    document.getElementById('login-active-title').textContent='请在浏览器打开授权链接 ('+pName+')：';
     document.getElementById('login-idle').style.display='none';
     document.getElementById('login-active').style.display='';
-    setLoginStatus('等待授权中…',false);
+    setLoginStatus('等待 '+pName+' 授权中…',false);
     try{window.open(_loginUrl,'_blank','noopener');}catch{}
-    pollLogin(d.flow_id);
+    pollLogin(d.flow_id, pName);
   }catch(e){
     showToast('发起登录失败: '+e.message,'error');
-    btn.disabled=false;
   }
 }
-function pollLogin(flowId){
+function pollLogin(flowId, pName){
   let n=0;
   _loginTimer=setInterval(async()=>{
     if(++n>120){stopLoginPoll();setLoginStatus('登录超时，请重试',true);return;}
@@ -312,7 +613,7 @@ function pollLogin(flowId){
       const d=await api('GET','/login/poll/'+flowId);
       if(d.status==='ready'){
         stopLoginPoll();
-        showToast('登录成功，已导入账号池','success');
+        showToast((pName||'平台')+' 登录成功，已导入账号池','success');
         closeModal('modal-add');
         load();
       }else if(d.status==='failed'){
@@ -396,7 +697,7 @@ async function onImportFile(ev){
 
 /* ── Helpers ── */
 function set(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
-function fmt(n){n=Number(n)||0;return n>=10000?(n/1000).toFixed(1)+'k':n;}
+function fmt(n){n=Number(n)||0;if(n>=1000000)return (n/1000000).toFixed(n%1000000===0?0:1)+'M';if(n>=10000)return (n/1000).toFixed(1)+'k';return n;}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtDate(d){if(!d)return'—';const dt=new Date(d*1000);return isNaN(dt)?'—':dt.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
 function openModal(id){document.getElementById(id).classList.add('open');}

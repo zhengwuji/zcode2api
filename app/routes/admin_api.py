@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ..auth_admin import verify_admin_key
+from ..claim import auto_claim_account, preview_plans, submit_claim
 from ..models import PROVIDERS, Status
 from ..oauth import ZaiAuthFlow
 from ..quota import fetch_quota, refresh_accounts
@@ -47,6 +48,8 @@ async def status_info():
     return {
         "providers": list(PROVIDERS),
         "gateway_key_set": bool(store.gateway_key()),
+        "auto_claim": store.auto_claim(),
+        "auto_switch": store.auto_switch(),
         "quota_pool": {
             p: sum(1 for a in store.list_accounts(p) if a.is_selectable())
             for p in PROVIDERS
@@ -72,8 +75,8 @@ async def add_accounts(payload: dict = Body(...)):
         name = payload.get("name") or f"{provider}-{len(store.list_accounts(provider)) + 1}"
         acc = store.add_account(provider, name, tok)
         added.append(acc.id)
-    # 立即刷新一次额度（仅 zai jwt）
-    fresh = [a for a in store.list_accounts(provider) if a.id in added and a.mode == "jwt"]
+    # 立即刷新一次额度
+    fresh = [a for a in store.list_accounts(provider) if a.id in added and (a.mode == "jwt" or (a.provider == "bigmodel" and a.api_key))]
     if fresh:
         await refresh_accounts(fresh)
     return {"count": len(added), "ids": added}
@@ -101,7 +104,7 @@ async def edit_account(account_id: str, payload: dict = Body(...)):
     secret = payload.get("token") or payload.get("secret")
     if secret:
         secret = secret.strip()
-        acc.mode = "jwt" if (secret.count(".") == 2 and acc.provider == "zai") else "apiKey"
+        acc.mode = "jwt" if secret.count(".") == 2 else "apiKey"
         acc.jwt_token = secret if acc.mode == "jwt" else None
         acc.api_key = None if acc.mode == "jwt" else secret
         acc.status = Status.ACTIVE
@@ -126,10 +129,10 @@ async def set_enabled(account_id: str, payload: dict = Body(...)):
 async def refresh(payload: dict = Body(default=None)):
     payload = payload or {}
     if payload.get("all"):
-        targets = [a for a in store.list_accounts("zai") if a.mode == "jwt"]
+        targets = [a for a in store.list_accounts() if a.mode == "jwt" or (a.provider == "bigmodel" and a.api_key)]
     else:
         ids = set(payload.get("ids") or [])
-        targets = [a for a in store.list_accounts() if a.id in ids and a.mode == "jwt"]
+        targets = [a for a in store.list_accounts() if a.id in ids and (a.mode == "jwt" or (a.provider == "bigmodel" and a.api_key))]
     summary = await refresh_accounts(targets)
     return {"summary": summary, "count": len(targets)}
 
@@ -139,23 +142,31 @@ async def refresh_one(account_id: str):
     acc = store.find_any(account_id)
     if not acc:
         raise HTTPException(404, "账号不存在")
-    if acc.mode != "jwt":
-        return {"ok": False, "message": "仅 Coding Plan (JWT) 账号支持额度查询"}
+    if acc.mode != "jwt" and not (acc.provider == "bigmodel" and acc.api_key):
+        return {"ok": False, "message": "仅 Coding Plan (JWT) 或支持用量的账号支持额度查询"}
     res = await fetch_quota(acc)
     return {"ok": "error" not in res, "result": res, "account": acc.public_view()}
 
 
-# ── OAuth 登录（Z.AI）────────────────────────────────────────────────────────
+# ── OAuth 登录（Z.AI / BigModel）─────────────────────────────────────────────
 @router.post("/login/start")
-async def login_start():
-    """发起 Z.AI OAuth，返回授权链接供前端展示。"""
-    flow = ZaiAuthFlow()
+async def login_start(request: Request):
+    """发起 OAuth，返回授权链接供前端展示。"""
+    provider = "zai"
+    try:
+        body = await request.json()
+        if isinstance(body, dict) and body.get("provider") in ("zai", "bigmodel"):
+            provider = body["provider"]
+    except Exception:
+        pass
+
+    flow = ZaiAuthFlow(provider=provider)
     try:
         flow_id, authorize_url = await flow.init()
     except Exception as err:  # noqa: BLE001
         raise HTTPException(502, f"登录初始化失败: {err}")
     _login_flows[flow_id] = flow
-    return {"flow_id": flow_id, "authorize_url": authorize_url}
+    return {"flow_id": flow_id, "authorize_url": authorize_url, "provider": provider}
 
 
 @router.get("/login/poll/{flow_id}")
@@ -176,20 +187,23 @@ async def login_poll(flow_id: str):
     if state != "ready":
         return {"status": "pending"}
 
+    provider = getattr(flow, "provider", "zai")
+    account_prefix = "oauth-bigmodel" if provider == "bigmodel" else "oauth-login"
+
     # 授权成功：保存 Coding Plan JWT，并尝试兑换 API Key 作为同账号回退
     zcode_jwt = data.get("token")
-    access_token = (data.get("zai") or {}).get("access_token")
+    access_token = (data.get(provider) or data.get("zai") or data.get("bigmodel") or {}).get("access_token")
     account = None
     if zcode_jwt:
-        account = store.add_account("zai", "oauth-login", zcode_jwt)
+        account = store.add_account(provider, account_prefix, zcode_jwt)
     if access_token:
         try:
             api_key = await flow.exchange_api_key(access_token)
-            if account is not None:
+            if account is not None and api_key:
                 account.api_key = api_key
                 store.update_account(account)
-            else:
-                account = store.add_account("zai", "oauth-login", api_key)
+            elif api_key:
+                account = store.add_account(provider, account_prefix, api_key)
         except Exception:  # noqa: BLE001 - 兑换失败不影响 JWT 已入池
             pass
 
@@ -209,6 +223,8 @@ async def get_settings():
         "admin_key": store.admin_key(),
         "gateway_key": store.gateway_key(),
         "quota_refresh_interval": store.quota_refresh_interval(),
+        "auto_claim": store.auto_claim(),
+        "auto_switch": store.auto_switch(),
     }
 
 
@@ -227,7 +243,50 @@ async def update_settings(payload: dict = Body(...)):
         except (TypeError, ValueError):
             raise HTTPException(400, "刷新间隔必须是非负整数")
         store.set_setting("quota_refresh_interval", str(interval))
+    if "auto_claim" in payload:
+        store.set_auto_claim(bool(payload["auto_claim"]))
+    if "auto_switch" in payload:
+        store.set_auto_switch(bool(payload["auto_switch"]))
     return {"ok": True}
+
+
+# ── 刷新资格与套餐领取 ───────────────────────────────────────────────────────
+@router.post("/accounts/{account_id}/claim/preview")
+async def preview_account_claim(account_id: str):
+    """查询单个账号可领取的套餐与资格状态。"""
+    acc = store.find_any(account_id)
+    if not acc:
+        raise HTTPException(404, "账号不存在")
+    return await preview_plans(acc)
+
+
+@router.post("/accounts/{account_id}/claim/submit")
+async def submit_account_claim(account_id: str, payload: dict = Body(default=None)):
+    """为单个账号提交套餐领取。"""
+    acc = store.find_any(account_id)
+    if not acc:
+        raise HTTPException(404, "账号不存在")
+    payload = payload or {}
+    plan_id = payload.get("plan_id")
+    if plan_id:
+        return await submit_claim(acc, plan_id)
+    return await auto_claim_account(acc)
+
+
+@router.post("/claim/refresh-all")
+async def claim_refresh_all():
+    """批量检测所有账号的套餐资格。若开启自动领取则直接尝试自动领取。"""
+    accounts = [a for a in store.list_accounts() if a.mode == "jwt"]
+    results = []
+    auto = store.auto_claim()
+    for a in accounts:
+        if auto:
+            res = await auto_claim_account(a)
+            results.append({"id": a.id, "name": a.name, "result": res})
+        else:
+            res = await preview_plans(a)
+            results.append({"id": a.id, "name": a.name, "preview": res})
+    return {"count": len(accounts), "auto_claimed": auto, "results": results}
 
 
 # ── 导入 / 导出 ─────────────────────────────────────────────────────────────

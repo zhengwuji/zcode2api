@@ -19,6 +19,11 @@ from ..agent import build_request
 from ..auth_admin import verify_gateway_key
 from ..captcha import captcha_manager
 from ..models import Account, Status
+from ..openai_bridge import (
+    anthropic_to_openai_response,
+    openai_to_anthropic_body,
+    stream_anthropic_to_openai,
+)
 from ..quota import fetch_quota
 from ..store import store
 
@@ -29,6 +34,8 @@ MAX_ACCOUNT_ATTEMPTS = 5
 
 # Z.AI 上游模型名大小写敏感
 MODEL_NAME_MAP = {
+    "glm-5.3": "GLM-5.3",
+    "glm-5.3-flash": "GLM-5.3-Flash",
     "glm-5.2": "GLM-5.2",
     "glm-5-turbo": "GLM-5-Turbo",
     "glm-turbo": "GLM-5-Turbo",
@@ -37,7 +44,7 @@ MODEL_NAME_MAP = {
 }
 
 # /v1/models 对外公布的可用模型
-AVAILABLE_MODELS = ["GLM-5.2", "GLM-5-Turbo"]
+AVAILABLE_MODELS = ["GLM-5.3", "GLM-5.3-Flash", "GLM-5.2", "GLM-5-Turbo"]
 
 # 命中以下信号则认为账号额度用完
 _EXHAUST_KEYWORDS = ("quota", "insufficient", "balance", "exhaust", "额度", "余额不足")
@@ -46,6 +53,12 @@ _EXHAUST_KEYWORDS = ("quota", "insufficient", "balance", "exhaust", "额度", "�
 def _detect_provider(body: dict, headers) -> str:
     model = body.get("model") or ""
     if model.startswith("bigmodel/") or headers.get("x-provider") == "bigmodel":
+        return "bigmodel"
+    if headers.get("x-provider") == "zai":
+        return "zai"
+    zai_available = any(a.is_selectable() for a in store.list_accounts("zai"))
+    bigmodel_available = any(a.is_selectable() for a in store.list_accounts("bigmodel"))
+    if not zai_available and bigmodel_available:
         return "bigmodel"
     return "zai"
 
@@ -116,6 +129,51 @@ async def list_models():
     }
 
 
+@router.post("/v1/chat/completions", dependencies=[Depends(verify_gateway_key)])
+async def chat_completions(request: Request):
+    """OpenAI 风格兼容端点：将 chat/completions 请求转为 Anthropic/ZCode 并在返回时桥接转换。"""
+    try:
+        raw_body = await request.json()
+    except (json.JSONDecodeError, ValueError):
+        return JSONResponse({"error": {"message": "请求体不是合法 JSON", "type": "invalid_request_error"}}, status_code=400)
+
+    model_name = str(raw_body.get("model") or "GLM-5.3")
+    chat_id = f"chatcmpl-{secrets.token_hex(12)}"
+    anthropic_body = openai_to_anthropic_body(raw_body)
+    incoming_headers = dict(request.headers)
+    provider = _detect_provider(anthropic_body, request.headers)
+    body = _normalize_body(anthropic_body)
+    port = request.url.port or settings.PORT
+    payload = json.dumps(body).encode("utf-8")
+
+    req_id = secrets.token_hex(3)
+    logs.req(req_id, f"[OpenAI] {model_name}", bool(body.get("stream")), _last_user_text(body))
+
+    tried: set[str] = set()
+    max_attempts = MAX_ACCOUNT_ATTEMPTS if store.auto_switch() else 1
+
+    for _ in range(max_attempts):
+        account = store.select(provider, skip_ids=tried)
+        if account is None:
+            break
+        tried.add(account.id)
+        needs_captcha = provider == "zai" and account.mode == "jwt"
+
+        result = await _try_account(
+            req_id, account, body, payload, incoming_headers, port, needs_captcha,
+            is_openai=True, chat_id=chat_id, model_name=model_name
+        )
+        if result is _NEXT_ACCOUNT:
+            continue
+        return result
+
+    logs.req_err(req_id, "无可用账号 / 额度均已耗尽")
+    return JSONResponse(
+        {"error": {"message": "所有账号均不可用或额度已用完，请在后台检查账号状态", "type": "insufficient_quota"}},
+        status_code=503,
+    )
+
+
 @router.post("/v1/messages", dependencies=[Depends(verify_gateway_key)])
 async def messages(request: Request):
     try:
@@ -134,8 +192,9 @@ async def messages(request: Request):
     logs.req(req_id, str(body.get("model") or "-"), bool(body.get("stream")), _last_user_text(body))
 
     tried: set[str] = set()
+    max_attempts = MAX_ACCOUNT_ATTEMPTS if store.auto_switch() else 1
 
-    for _ in range(MAX_ACCOUNT_ATTEMPTS):
+    for _ in range(max_attempts):
         account = store.select(provider, skip_ids=tried)
         if account is None:
             break
@@ -157,7 +216,10 @@ async def messages(request: Request):
 _NEXT_ACCOUNT = object()
 
 
-async def _try_account(req_id, account, body, payload, incoming_headers, port, needs_captcha):
+async def _try_account(
+    req_id, account, body, payload, incoming_headers, port, needs_captcha,
+    is_openai: bool = False, chat_id: str = "", model_name: str = ""
+):
     """尝试用单个账号转发，含验证码续期。返回 Response 或 _NEXT_ACCOUNT。"""
     for attempt in range(MAX_CAPTCHA_RETRIES):
         verify_param = None
@@ -233,6 +295,33 @@ async def _try_account(req_id, account, body, payload, incoming_headers, port, n
         store.update_account(account)
         asyncio.create_task(_safe_refresh(account))
 
+        if is_openai:
+            if body.get("stream"):
+                async def _openai_stream_wrap():
+                    try:
+                        async for chunk in stream_anthropic_to_openai(resp, chat_id, model_name):
+                            yield chunk.encode("utf-8")
+                        logs.req_ok(req_id)
+                    except Exception as err:
+                        logs.req_err(req_id, f"OpenAI 流传输中断: {err}")
+                    finally:
+                        await cm.__aexit__(None, None, None)
+                        await client.aclose()
+
+                return StreamingResponse(
+                    _openai_stream_wrap(),
+                    status_code=status_code,
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+                )
+            else:
+                text = (await resp.aread()).decode("utf-8", "ignore")
+                await cm.__aexit__(None, None, None)
+                await client.aclose()
+                data = _safe_json(text) or {}
+                logs.req_ok(req_id)
+                return JSONResponse(anthropic_to_openai_response(data, model_name, chat_id), status_code=status_code)
+
         content_type = resp.headers.get("content-type", "application/json")
 
         async def _body_iter():
@@ -264,7 +353,7 @@ def _safe_json(text: str):
 
 async def _safe_refresh(account: Account) -> None:
     try:
-        if account.provider == "zai" and account.mode == "jwt":
+        if account.mode == "jwt" or (account.provider == "bigmodel" and account.api_key):
             await fetch_quota(account)
     except Exception:  # noqa: BLE001
         pass

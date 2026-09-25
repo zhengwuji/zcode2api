@@ -40,21 +40,30 @@ def build_request(
         else:
             raise RuntimeError("账号缺少有效凭证")
     elif provider == "bigmodel":
-        target_url = settings.UPSTREAM["bigmodel"]
-        if not account.api_key:
-            raise RuntimeError("BigModel 账号缺少 API Key")
-        auth = {"x-api-key": account.api_key}
+        if account.mode == "jwt" and account.jwt_token:
+            target_url = settings.UPSTREAM["zai"]
+            auth = {"Authorization": f"Bearer {account.jwt_token}"}
+        elif account.api_key:
+            target_url = settings.UPSTREAM["bigmodel"]
+            auth = {"x-api-key": account.api_key}
+        else:
+            raise RuntimeError("BigModel 账号缺少有效凭证 (JWT 或 API Key)")
     else:
         raise RuntimeError(f"未知提供商: {provider}")
+
+    from .claim import get_device_mid
 
     headers = {
         "content-type": "application/json",
         **auth,
         "anthropic-version": "2023-06-01",
-        "User-Agent": settings.USER_AGENT,
-        "X-ZCode-App-Version": "3.0.1",
+        "User-Agent": "ZCode/3.11.2",
+        "X-ZCode-App-Version": "3.11.2",
         "X-ZCode-Agent": "glm",
-        "HTTP-Referer": "https://zcode.z.ai/",
+        "HTTP-Referer": "https://zcode.z.ai",
+        "X-Title": "Z Code@electron",
+        "X-Platform": "win32-x64",
+        "X-Device-Mid": get_device_mid(),
     }
     if verify_param:
         headers["X-Aliyun-Captcha-Verify-Param"] = verify_param

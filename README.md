@@ -1,182 +1,222 @@
 # zcode2api
 
-将 ZCode (zcode.z.ai) Coding Plan 额度转为标准 Anthropic Messages API，支持多账号轮询、
-额度用完自动换号、实时用量监控、后台管理 UI 与鉴权，以及阿里云无痕验证自动续期。
+<div align="center">
 
-## 快速开始
+**强大的 ZCode / Z.AI / 智谱 BigModel 多账号管理与全协议 AI API 反代网关**
+
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg)](https://www.python.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
+[![Protocol](https://img.shields.io/badge/Protocol-OpenAI%20%7C%20Anthropic-orange.svg)](#api-反代与客户端接入指南)
+
+将 ZCode (zcode.z.ai) Coding Plan 与智谱开放平台 (BigModel) 凭证无缝转化为标准的 **OpenAI** 与 **Anthropic** 兼容 API，支持多账号智能负载均衡、额度耗尽自动切号、套餐资格检测与自动抢领、实时用量监控与无浏览器无痕验证码自动续期。
+
+[功能亮点](#-核心功能亮点) • [快速开始](#-快速开始) • [客户端配置指南](#-客户端配置指南) • [Docker 部署](#-docker-部署) • [模型支持](#-支持的模型列表) • [安全与防封建议](#-安全与防封建议)
+
+</div>
+
+---
+
+## ✨ 核心功能亮点
+
+* 🌐 **全协议反代网关（OpenAI + Anthropic 双兼容）**：
+  * **OpenAI 兼容端点**：`/v1/chat/completions` 与 `/v1/models`，完美适配市面上 99% 的 AI 工具（Cherry Studio、NextChat、Cursor、One-API、New API、Chatbox、LobeChat 等）。
+  * **Anthropic 兼容端点**：`/v1/messages`，原生支持 Claude 客户端、Cline、Roo Code 及 Claude Code。
+* 🔀 **多账号智能轮询与无感自动切号 (`auto_switch`)**：
+  * 多个账号通过 Round-Robin 算法自动负载均衡。
+  * 遇到账号额度耗尽（HTTP 402/提示 balance exhaust）、上游限流（429）或凭证失效时，网关在**同一次请求中自动无感故障转移**到下一个可用账号，调用绝不中断。
+* 🎁 **套餐资格刷新与自动领取 (`auto_claim`)**：
+  * 深度参考 Z-Accounts 核心原理，提供 **「刷新资格」** 接口，一键并发探测账号池中所有账号在官方当前可领取的体验套餐包（如 Start Plan 3M/5M 配额）。
+  * 开启 **「自动领取」** 后，后台监控或新账号入池时会自动求解人机验证并抢领免费方案，彻底告别手动续期。
+* 📊 **实时用量监控与精确原因诊断**：
+  * 可视化图表展示每个账号各模型的总额度、已消耗、剩余额度与重置周期。
+  * **彻底告别含糊不清的“未获取”**：账号无额度时会精确诊断并展示原因（如 *未开通方案（新号/未领取）*、*Token 失效 401/403*、*额度耗尽 0 剩余*、*官方限流 429* 等），并直接附带快捷领取/检测入口。
+* 🖼️ **多模态视觉 (Vision) 完整兼容**：
+  * 原生支持 `GLM-5.3` / `GLM-5.3-Flash` 视觉识图，客户端上传或粘贴的截图（Base64 `image_url`）会自动转译为上游规范，直接识图写代码、排查报错截图。
+* 🛡️ **轻量级纯内存无痕验证求解器**：
+  * 基于 Node.js + jsdom 补齐浏览器环境，**无需安装臃肿的 Chromium 或无头浏览器**，极速求解阿里云无痕人机验证（`X-Aliyun-Captcha-Verify-Param`）。
+* 🖥️ **清新现代的管理后台**：
+  * 提供卡片化 Web 后台，支持 OAuth 一键授权登录导入、批量凭证粘贴、JSON 导入导出、一键开关自动切号与自动领取。
+* ⚡ **极速开箱与防端口冲突**：
+  * Windows 内置 `start.bat` / `start.ps1` 与 `stop.bat` / `stop.ps1`，自动检测端口占用并智能递增顺延，双击即可直接运行。
+
+---
+
+## 🚀 快速开始
+
+### 方式一：Windows 一键运行（推荐）
+
+1. 确保电脑已安装 [Python 3.10+](https://www.python.org/) 和 [Node.js 18+](https://nodejs.org/)。
+2. 双击运行根目录下的 **`start.bat`**。
+   * 脚本会自动初始化虚拟环境、安装依赖、检查端口占用（默认 `3335`，被占用则自动顺延）并启动后台服务。
+   * 如需停止服务，双击运行 **`stop.bat`** 即可。
+
+### 方式二：手动命令行启动 (Windows / Linux / macOS)
 
 ```bash
-pip install -r requirements.txt
-# 无痕验证求解器（无浏览器，Node + jsdom）。需已安装 Node.js：
-cd captcha_node && npm install && cd ..
-cp .env.example .env                     # 按需修改
+# 1. 克隆代码
+git clone https://github.com/zhengwuji/zcode2api.git
+cd zcode2api
 
-python main.py serve                     # 启动网关 + 后台 UI（默认端口 3000）
+# 2. 安装 Python 依赖
+python -m venv venv
+# Linux / macOS: source venv/bin/activate
+# Windows PowerShell: .\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 3. 安装无痕验证求解器依赖 (Node.js)
+cd captcha_node && npm install && cd ..
+
+# 4. 复制并调整配置文件（可选）
+cp .env.example .env
+
+# 5. 启动服务（默认监听端口 3335）
+python main.py serve
 ```
 
-- 后台管理：`http://localhost:3000/admin`（默认密码 `zcode`）
-- 对话端点：`http://localhost:3000/v1/messages`（兼容 Anthropic Messages 协议）
+服务启动后，可在浏览器访问：
+* **管理后台**：`http://localhost:3335/admin`（默认管理密码：`zcode`）
+* **OpenAI 兼容反代**：`http://localhost:3335/v1/chat/completions`
+* **Anthropic 兼容反代**：`http://localhost:3335/v1/messages`
+* **模型列表**：`http://localhost:3335/v1/models`
 
-## Docker 部署
+---
 
-镜像内同时包含 Python(网关)与 Node(无浏览器无痕验证求解器),开箱即用。
+## 🔌 API 反代与客户端接入指南
+
+通过 `zcode2api`，你可以将 Z.AI / BigModel 的模型无缝挂载到任何支持自定义 OpenAI 或 Claude 接口的客户端中：
+
+### 核心接入参数一览
+
+| 参数项 | 填写内容 | 说明 |
+| :--- | :--- | :--- |
+| **OpenAI 接口地址 (Base URL)** | `http://127.0.0.1:3335/v1` | 大多数软件（Cherry Studio / NextChat / Cursor 等）填此项 |
+| **Claude 接口地址 (Base URL)** | `http://127.0.0.1:3335` | 针对 Cline、Roo Code 等 Anthropic 专用插件 |
+| **API Key (网关密钥)** | 留空或任意字符（如 `sk-zcode`） | 若在后台【设置】配置了 `网关 API Key`，则填入对应密钥 |
+| **推荐模型名称** | `GLM-5.3`<br>`GLM-5.3-Flash`<br>`GLM-5.2`<br>`GLM-5-Turbo` | 支持别名映射，如 `glm-4-plus`、`claude-3-7-sonnet-20250219` |
+
+---
+
+### 常见客户端配置步骤
+
+#### 1. Cherry Studio
+1. 打开 **设置** → **模型服务商** → 点击 **添加**，类型选择 **OpenAI**。
+2. **API 域名**：填入 `http://127.0.0.1:3335/v1`。
+3. **API 密钥**：未设置网关密钥时可填任意字符（如 `sk-zcode`）。
+4. **模型**：点击【添加模型】，输入 `GLM-5.3` 和 `GLM-5.3-Flash`，勾选启用并在右侧**勾选「视觉」**（支持识图）。
+
+#### 2. NextChat (ChatGPT-Next-Web)
+1. 点击左下角 **设置** → **模型服务商** 选择 **OpenAI**。
+2. **接口地址 (URL)**：填入 `http://127.0.0.1:3335/v1`。
+3. **API Key**：填入网关密钥或任意字符。
+4. **自定义模型**：在输入框末尾追加 `+GLM-5.3,+GLM-5.3-Flash`，保存即可。
+
+#### 3. Cursor
+1. 进入 **Settings** → **Features** → **Models**。
+2. 开启 **OpenAI API Key**。
+3. 勾选 **Override OpenAI Base URL**，填入：`http://127.0.0.1:3335/v1`。
+4. 在下方 **Model Names** 中点击【Add model】，添加 `GLM-5.3`。
+
+#### 4. One-API / New API / Chatbox
+1. **添加渠道** → 类型选择 **OpenAI**。
+2. **Base URL**：填入 `http://127.0.0.1:3335`。
+3. **密钥**：填入网关密钥。
+4. **模型**：填入 `GLM-5.3,GLM-5.3-Flash,GLM-5.2,GLM-5-Turbo`。
+
+#### 5. cURL 命令行测试
+```bash
+curl -X POST "http://127.0.0.1:3335/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-zcode" \
+  -d '{
+    "model": "GLM-5.3",
+    "messages": [{"role": "user", "content": "你好，请做个自我介绍！"}],
+    "stream": true
+  }'
+```
+
+---
+
+## 🐳 Docker 部署
+
+镜像内已打包 Python 运行环境与 Node.js 无痕验证求解器，开箱即用：
 
 ```bash
-# 方式一：docker compose（推荐）
+# 方式一：Docker Compose（推荐）
 docker compose up -d --build
-# 账号 / 设置持久化在宿主机 ./data 目录；停止：docker compose down
 
-# 方式二：docker 原生命令
+# 方式二：Docker 原生命令
 docker build -t zcode2api:latest .
 docker run -d --name zcode2api \
-  -p 3000:3000 \
+  -p 3335:3335 \
   -v "$(pwd)/data:/data" \
   -e ZCODE_ADMIN_KEY=zcode \
+  -e ZCODE_PORT=3335 \
   --restart unless-stopped \
   zcode2api:latest
 ```
 
-- 数据卷:容器内 `/data`(对应 `ZCODE_DATA_DIR`)存放 `accounts.db`,务必挂载到宿主机以持久化。
-- 环境变量同下方「环境变量」表,可在 `docker-compose.yml` 的 `environment` 下覆盖。
-- **请勿**将 `.env`、`data/` 打入镜像——已在 `.dockerignore` 中排除。
+* 容器内 `/data` 目录用于持久化 SQLite 数据库（账号池、设置等），挂载到宿主机即可持久化。
 
-### 自动构建镜像(GHCR)
+---
 
-`.github/workflows/docker-build.yml` 会在**每次更新**(push 到 `master` 或打 `v*` tag)时
-**自动构建并发布镜像到 GHCR(GitHub 容器仓库,`ghcr.io`)**,使用内置 `GITHUB_TOKEN`,
-**不使用 Docker Hub**;Pull Request 仅构建验证、不推送。
+## 📦 支持的模型列表
 
-```bash
-# 拉取并运行已发布镜像（tag: latest 或 sha-xxxxxxx）
-docker run -d --name zcode2api -p 3000:3000 \
-  -v "$(pwd)/data:/data" -e ZCODE_ADMIN_KEY=zcode \
-  ghcr.io/yuanhhs/zcode2api:latest
-```
+| 模型名 (Model ID) | 视觉支持 (Vision) | 特点与推荐场景 |
+| :--- | :---: | :--- |
+| **`GLM-5.3`** | ✅ **支持** | 官方主力旗舰多模态模型，支持识图、看代码报错与页面设计图（推荐） |
+| **`GLM-5.3-Flash`** | ✅ **支持** | 轻量极速多模态模型，响应延迟极低，写代码补全体验极佳 |
+| **`GLM-5.2`** | ⚪ 部分支持 | 上一代通用旗舰模型 |
+| **`GLM-5-Turbo`** | ❌ 仅文本 | 超长文本与纯代码推理模型 |
+| **`glm-4-plus`** | 自动映射 | 兼容上一代接口命名规范 |
+| **`claude-3-7-sonnet-20250219`** | 自动映射 | 兼容 Claude Code / Cline 的别名路由 |
 
-> 首次发布后,GHCR 上的包默认可能为私有;如需公开拉取,请到仓库 **Packages → 该包 → Package settings → Change visibility** 设为 Public。
+---
 
-## 后台 UI
+## 🛡️ 安全与防封建议
 
-| 页面 | 说明 |
-|------|------|
-| `/admin/login` | 后台登录（Bearer 密钥鉴权，凭证加密存于浏览器 localStorage）|
-| `/admin/accounts` | 账号池：新增/导入/导出、启用禁用、**实时额度与状态监控**（每 5 秒刷新）|
-| `/admin/settings` | 后台密码、网关 API Key |
+1. **官方 API Key 模式**：
+   * 官方本身对外提供商业调用，完全合法合规，**几乎无封号风险**。
+2. **Coding Plan (JWT) 模式**：
+   * **个人写代码、正常聊天**：行为特征、QPS 与桌面客户端一致，且系统固定携带设备指纹（`X-Device-Mid`），**非常安全**。
+   * **请勿进行超高并发轰炸**：避免挂载到全量批量扫描器、爬虫等超高频工具上，避免单账号持续触发 429。
+   * **建议开启自动切号**：账号池多放 2~3 个账号，开启顶部【自动切号】与【自动领取】，网关会自动进行安全平滑轮换。
 
-账号池页实时展示每个账号的状态（正常 / 额度用完 / 限流 / 异常 / 禁用）、各模型剩余额度、
-调用与失败次数。请求按 round-robin 分发，**某账号额度用完会自动切换到下一个账号**，并在 UI 中即时反映。
+---
 
-## 多账号轮询与换号
-
-- 在「账号池」粘贴 Coding Plan JWT（3 段点分）或 API Key，每行一个即可加入轮询。
-- 网关每次请求选择下一个「可用」账号（跳过用完 / 限流 / 异常 / 禁用）。
-- 命中额度用完信号（余额为 0、上游 402、错误体含 quota/余额 等）→ 标记 `exhausted` 并换下一个账号。
-- 上游 429 → 标记 `cooling` 冷却一段时间后自动恢复；401/403（非验证码）→ 标记 `invalid`。
-- 后台任务按 `ZCODE_QUOTA_REFRESH_INTERVAL` 周期刷新各账号额度；也可在 UI 手动刷新。
-
-## 鉴权
-
-- **后台鉴权**：所有 `/admin/api/*` 需 `Authorization: Bearer <后台密码>`。
-- **网关鉴权（可选）**：在「设置」配置「网关 API Key」后，`/v1/messages` 须携带
-  `Authorization: Bearer <key>` 或 `x-api-key: <key>`；留空则不校验。
-
-## 无痕验证（无浏览器）
-
-Coding Plan（JWT）模式调用 `zcode.z.ai` 上游时需要阿里云无痕验证参数
-（请求头 `X-Aliyun-Captcha-Verify-Param`）。本项目**不启动任何真实浏览器**，
-而是用 **Node + jsdom** 在模拟浏览器环境中运行阿里云官方无痕 SDK 来求得该参数。
-
-- 求解器位于 `captcha_node/solver.js`；首次使用前需执行 `cd captcha_node && npm install`。
-- `app/captcha.py` 以子进程方式调用求解器，内置结果缓存（默认 45s）、并发去重与失败重试。
-- 求解器在 jsdom 中补齐了 SDK 依赖的浏览器 API（`matchMedia`、canvas/WebGL、`Worker`、`OffscreenCanvas`），
-  执行 `startTracelessVerification` 后输出 `verifyParam`。
-- `verifyParam` 实为 `base64(JSON{certifyId, sceneId, isSign, securityToken})`，由阿里云服务端签发。
-- 仅 Coding Plan（JWT）账号需要；API Key 账号走 `api.z.ai` 回退端点，无需验证码。
-
-> 求解器运行的是阿里云自家混淆 SDK。若阿里云更新其指纹逻辑（feilin / cloudauth-device），
-> 可能需要相应调整 `solver.js` 中补齐的浏览器 API 桩。该方案无需真实浏览器，比无头 Chromium 轻量很多。
-
-## 命令行
-
-```bash
-python main.py serve [--port 3000]                 # 启动服务
-python main.py login zai [--no-browser]            # OAuth 登录 Z.AI 并自动入池
-python main.py add-account zai <name> <jwt|key>    # 添加轮询账号
-python main.py accounts [zai|bigmodel]             # 查看账号列表
-python main.py remove-account <provider> <id|name> # 删除账号
-python main.py quota                               # 查看各账号实时额度
-python main.py status                              # 查看配置概览
-python main.py set-admin-key <key>                 # 设置后台密码
-python main.py export [file] / import <file>       # 导出 / 导入账号
-```
-
-## 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `ZCODE_PORT` | 3000 | 服务端口 |
-| `ZCODE_HOST` | 0.0.0.0 | 监听地址 |
-| `ZCODE_ADMIN_KEY` | zcode | 后台密码初始值（之后以 DB 为准）|
-| `ZCODE_DATA_DIR` | ./data | 数据目录（SQLite 存放处）|
-| `ZCODE_QUOTA_REFRESH_INTERVAL` | 60 | 后台刷新额度间隔（秒），0 关闭 |
-| `ZCODE_COOLING_SECONDS` | 300 | 限流冷却时长（秒）|
-| `ZCODE_NODE_PATH` | node | 无痕验证求解器使用的 Node 可执行文件 |
-| `ZCODE_CAPTCHA_TIMEOUT` | 40 | 单次验证码求解超时（秒）|
-| `ZCODE_CAPTCHA_RETRIES` | 4 | 验证码求解失败重试次数 |
-| `CAPTCHA_CACHE_TTL` | 45000 | 验证码缓存时长 (ms) |
-| `ZAI_UPSTREAM_URL` / `ZAI_FALLBACK_URL` / `BIGMODEL_UPSTREAM_URL` | — | 上游端点 |
-
-## 项目结构
+## 📁 项目结构
 
 ```
 ├── app/
-│   ├── main.py            # FastAPI 应用工厂 + 生命周期
-│   ├── settings.py        # 环境变量 / 配置
-│   ├── models.py          # Account 数据模型与状态
-│   ├── store.py           # SQLite 持久化 + 轮询游标（data/accounts.db）
-│   ├── agent.py           # 上游请求构建
-│   ├── captcha.py         # 无痕验证求解（调用 Node 求解器）
-│   ├── quota.py           # 额度查询 + 后台用量监控
-│   ├── oauth.py           # Z.AI OAuth 登录流程
-│   ├── auth_admin.py      # 后台 / 网关鉴权
-│   ├── logs.py            # 彩色终端日志
-│   ├── routes/            # gateway / admin_api / pages
-│   └── statics/           # app.css, auth.js, toast.js, header.js, admin/*.html
-├── captcha_node/          # 无浏览器无痕验证求解器（Node + jsdom，solver.js）
-├── main.py                # 命令行入口（serve / login / accounts / quota ...）
-├── data/                  # 运行时生成：accounts.db (SQLite)
-├── Dockerfile             # 镜像（Python + Node）
-├── docker-compose.yml     # 一键部署
-├── .dockerignore
-├── .github/workflows/     # docker-build.yml（仅构建验证，不推送 Docker Hub）
-├── docs/ARCHITECTURE.md   # 架构概览
-├── requirements.txt
-└── .env.example
+│   ├── main.py            # FastAPI 应用入口与生命周期管理
+│   ├── settings.py        # 环境变量与默认配置
+│   ├── models.py          # Account 实体、数据状态与 Public View
+│   ├── store.py           # SQLite 持久化、轮询游标与设置存储
+│   ├── agent.py           # 官方上游请求头组装（指纹、MID、版本仿真）
+│   ├── claim.py           # 套餐资格查询（preview）与自动抢领（claim）
+│   ├── captcha.py         # 阿里云无痕验证码管理器
+│   ├── openai_bridge.py   # OpenAI / Anthropic 协议与多模态双向桥接器
+│   ├── quota.py           # 实时额度/用量抓取与精确原因诊断
+│   ├── oauth.py           # Z.AI / BigModel OAuth 授权登录
+│   ├── auth_admin.py      # 后台与网关密钥鉴权
+│   ├── logs.py            # 格式化彩色日志输出
+│   ├── routes/            # API 路由：gateway / admin_api / pages
+│   └── statics/           # 前端样式、JS 逻辑与后台页面 (accounts.html 等)
+├── captcha_node/          # 无浏览器无痕验证求解器（Node + jsdom）
+├── main.py                # CLI 入口与服务启动调度
+├── start.bat / start.ps1  # Windows 一键启动脚本（含端口碰撞自增）
+├── stop.bat / stop.ps1    # Windows 一键停止脚本
+├── requirements.txt       # Python 依赖清单
+├── Dockerfile             # 容器镜像构建文件
+├── docker-compose.yml     # Compose 编排文件
+└── .env.example           # 环境变量示例模板
 ```
 
-## 技术栈
+---
 
-- Python 3.13 · FastAPI · Uvicorn · httpx
-- SQLite（账号 / 设置持久化，WAL 模式）
-- Node.js + jsdom（无浏览器求解阿里云无痕验证 → verifyParam）
+## 📄 许可证与免责声明
 
-## 文档
+本项目采用 [AGPL-3.0](LICENSE) 许可证开源。
 
-- [架构概览 docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 系统架构图、请求流程、账号状态机、无痕验证流程与已知限制。
-
-## 致谢
-
-- UI 设计参考:[chenyme/grok2api](https://github.com/chenyme/grok2api)
-- 社区:[linux.do](https://linux.do)
-
-## 许可证
-
-本项目采用 [AGPL-3.0](LICENSE) 许可证。
-
-## 重要免责声明
-
-本仓库仅供学习、研究、个人实验和内部验证使用，不提供任何形式的商业授权、适用性保证或结果保证。
-
-作者及仓库维护者不对因使用、修改、分发、部署或依赖本项目而产生的任何直接或间接损失、账号封禁、数据丢失、法律风险或第三方索赔负责。
-
-请勿将本项目用于违反服务条款、协议、法律法规或平台规则的场景。商业使用前请自行确认 LICENSE、相关协议以及你是否获得了作者的书面许可。
+**免责声明**：本项目仅供学习、研究、个人开发辅助及实验验证使用。请勿将本项目用于违反相关平台服务协议或法律法规的场景。使用者应对自身的使用行为及账号安全承担全部责任。

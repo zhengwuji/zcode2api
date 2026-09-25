@@ -56,7 +56,7 @@ class Account:
     @staticmethod
     def create(provider: str, name: str, secret: str) -> "Account":
         secret = (secret or "").strip()
-        is_jwt = secret.count(".") == 2 and provider == "zai"
+        is_jwt = secret.count(".") == 2
         return Account(
             id=_account_id(name),
             name=name or f"{provider}-account",

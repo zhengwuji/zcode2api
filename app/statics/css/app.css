@@ -175,6 +175,15 @@ tr:hover td{background:#fdfdfd}
 .dialog-btn-danger{color:#b42318;background:#fff5f4}
 .dialog-btn-danger:hover{background:#feeceb}
 
+/* OAuth provider list (匹配截图样式) */
+.oauth-provider-list{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.oauth-provider-item{width:100%;display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-radius:8px;background:#f3f4f6;border:1px solid #e5e7eb;color:#1f2937;font-size:14px;font-weight:500;transition:background .15s,border-color .15s;cursor:pointer;text-align:left}
+.oauth-provider-item:hover{background:#e5e7eb;border-color:#d1d5db}
+.oauth-provider-item:active{transform:scale(.995)}
+.oauth-provider-name{font-size:14px;color:#1f2937;font-weight:500}
+.oauth-provider-arrow{display:inline-flex;align-items:center;color:#6b7280;font-size:13px}
+.oauth-provider-item:hover .oauth-provider-arrow{color:#111}
+
 /* Settings card */
 .settings-card{background:#fff;border-radius:14px;padding:22px;margin-bottom:16px;max-width:640px}
 .settings-row{display:grid;gap:6px;margin-bottom:18px}
@@ -191,3 +200,31 @@ tr:hover td{background:#fdfdfd}
   .admin-main{padding:74px 14px 24px}
   .admin-nav-link{padding:6px 10px;font-size:13px}
 }
+
+/* Quota diagnostic reason */
+.quota-reason-box{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;background:#fef2f2;border:1px solid #fee2e2;font-size:11px;color:#991b1b;max-width:280px;line-height:1.4}
+.quota-reason-box.is-info{background:#eff6ff;border-color:#dbeafe;color:#1e40af}
+.quota-reason-box.is-warn{background:#fffbeb;border-color:#fef3c7;color:#92400e}
+.quota-reason-box.is-muted{background:#f4f4f5;border-color:#e4e4e7;color:#52525b}
+.quota-reason-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quota-action-link{font-size:11px;font-weight:600;text-decoration:underline;cursor:pointer;margin-left:4px;flex-shrink:0}
+
+/* Switch toggles in toolbar */
+.toolbar-switch{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#444;background:#fff;border:1px solid #e5e5e5;padding:4px 10px;border-radius:999px;cursor:pointer;user-select:none;transition:border-color .15s}
+.toolbar-switch:hover{border-color:#ccc}
+.switch-indicator{width:28px;height:16px;background:#e5e7eb;border-radius:999px;position:relative;transition:background-color .2s;flex-shrink:0}
+.switch-indicator::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.toolbar-switch.is-active{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
+.toolbar-switch.is-active .switch-indicator{background:#22c55e}
+.toolbar-switch.is-active .switch-indicator::after{transform:translateX(12px)}
+
+/* API guide modal code blocks */
+.guide-card{background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:12px;margin-bottom:12px}
+.guide-field{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.guide-field:last-child{margin-bottom:0}
+.guide-label{font-size:12px;font-weight:600;color:#555;width:90px;flex-shrink:0}
+.guide-val-wrap{flex:1;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #ddd;border-radius:6px;padding:4px 8px}
+.guide-val{font-family:ui-monospace,monospace;font-size:12px;color:#111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.guide-copy-btn{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#eee;color:#333;cursor:pointer}
+.guide-copy-btn:hover{background:#ddd}
+.code-preview{background:#1e1e2e;color:#cdd6f4;padding:10px 12px;border-radius:6px;font-family:ui-monospace,monospace;font-size:11px;line-height:1.45;overflow-x:auto;white-space:pre}
