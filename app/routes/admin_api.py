@@ -247,7 +247,14 @@ async def update_settings(payload: dict = Body(...)):
         store.set_auto_claim(bool(payload["auto_claim"]))
     if "auto_switch" in payload:
         store.set_auto_switch(bool(payload["auto_switch"]))
-    return {"ok": True}
+    return {"ok": True, "gateway_key": store.gateway_key()}
+
+
+@router.post("/settings/regenerate-key")
+async def regenerate_key():
+    """重新生成随机网关 API 密钥。"""
+    new_key = store.regenerate_gateway_key()
+    return {"ok": True, "gateway_key": new_key}
 
 
 # ── 刷新资格与套餐领取 ───────────────────────────────────────────────────────

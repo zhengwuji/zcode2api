@@ -228,11 +228,16 @@
             <button class="guide-copy-btn" onclick="copyText(document.getElementById('guide-anthropic-url').textContent)">复制</button>
           </div>
         </div>
-        <div class="guide-field">
-          <span class="guide-label">网关密钥 (API Key)</span>
-          <div class="guide-val-wrap">
-            <span class="guide-val" id="guide-api-key"></span>
-            <button class="guide-copy-btn" onclick="copyText(document.getElementById('guide-api-key').textContent)">复制</button>
+        <div class="guide-field" style="align-items:flex-start">
+          <span class="guide-label" style="margin-top:6px">网关 API 密钥</span>
+          <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+            <div class="guide-val-wrap" style="padding:2px 6px">
+              <input class="input" id="guide-api-key-input" style="height:28px;padding:0 4px;font-family:ui-monospace,monospace;font-size:12px;border:none;background:transparent;flex:1" placeholder="API 密钥">
+              <button class="guide-copy-btn" onclick="copyGatewayKey()">复制</button>
+              <button class="guide-copy-btn" style="background:#111;color:#fff" onclick="saveGatewayKeyFromModal()">保存更改</button>
+              <button class="guide-copy-btn" style="background:#e0e7ff;color:#3730a3" onclick="regenerateGatewayKeyModal()" title="重新随机生成一个全新 API Key">随机生成</button>
+            </div>
+            <div style="font-size:11px;color:#888">系统默认自动生成随机密钥，可直接复制粘贴到客户端；亦可随意修改为自定义密钥或点击随机生成。</div>
           </div>
         </div>
         <div class="guide-field">
@@ -522,16 +527,27 @@ async function doSubmitClaim(){
 }
 
 /* ── API 反代接入指南 ── */
-function openApiGuide(){
+async function openApiGuide(){
   const origin=location.origin;
   const openaiUrl=origin+'/v1';
   const anthropicUrl=origin;
-  const key=currentGatewayKey||'sk-zcode2api-gateway';
+
+  try {
+    const s = await api('GET', '/settings');
+    currentGatewayKey = s.gateway_key || '';
+  } catch(e) {}
+
+  const key = currentGatewayKey || 'sk-zcode2api-gateway';
 
   document.getElementById('guide-openai-url').textContent=openaiUrl;
   document.getElementById('guide-anthropic-url').textContent=anthropicUrl;
-  document.getElementById('guide-api-key').textContent=currentGatewayKey?currentGatewayKey:'(当前未设置密钥，任意字符均可)';
+  document.getElementById('guide-api-key-input').value=key;
 
+  updateCurlExample(openaiUrl, key);
+  openModal('modal-api-guide');
+}
+
+function updateCurlExample(openaiUrl, key){
   const curlCode=`curl -X POST "${openaiUrl}/chat/completions" \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${key}" \\
@@ -541,7 +557,37 @@ function openApiGuide(){
     "stream": true
   }'`;
   document.getElementById('guide-curl-example').textContent=curlCode;
-  openModal('modal-api-guide');
+}
+
+function copyGatewayKey(){
+  const key = document.getElementById('guide-api-key-input').value.trim();
+  if(!key) return showToast('密钥为空', 'error');
+  copyText(key);
+}
+
+async function saveGatewayKeyFromModal(){
+  const key = document.getElementById('guide-api-key-input').value.trim();
+  if(!key) return showToast('API 密钥不能为空', 'error');
+  try {
+    await api('PUT', '/settings', { gateway_key: key });
+    currentGatewayKey = key;
+    updateCurlExample(location.origin + '/v1', key);
+    showToast('API 密钥已更新保存！', 'success');
+  } catch(e) {
+    showToast('保存失败: ' + e.message, 'error');
+  }
+}
+
+async function regenerateGatewayKeyModal(){
+  try {
+    const d = await api('POST', '/settings/regenerate-key');
+    currentGatewayKey = d.gateway_key;
+    document.getElementById('guide-api-key-input').value = d.gateway_key;
+    updateCurlExample(location.origin + '/v1', d.gateway_key);
+    showToast('已重新生成全新 API 密钥！', 'success');
+  } catch(e) {
+    showToast('生成失败: ' + e.message, 'error');
+  }
 }
 
 function copyText(str){

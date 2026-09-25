@@ -93,7 +93,7 @@ python main.py serve
 | :--- | :--- | :--- |
 | **OpenAI 接口地址 (Base URL)** | `http://127.0.0.1:3335/v1` | 大多数软件（Cherry Studio / NextChat / Cursor 等）填此项 |
 | **Claude 接口地址 (Base URL)** | `http://127.0.0.1:3335` | 针对 Cline、Roo Code 等 Anthropic 专用插件 |
-| **API Key (网关密钥)** | 留空或任意字符（如 `sk-zcode`） | 若在后台【设置】配置了 `网关 API Key`，则填入对应密钥 |
+| **API Key (网关密钥)** | `sk-zcode2api-...`（系统默认自动生成） | 初次启动默认随机生成一个安全密钥；可在后台「API 反代接入说明」弹窗或「设置」页直接一键复制，也支持随时自定义修改或点击随机重置 |
 | **推荐模型名称** | `GLM-5.3`<br>`GLM-5.3-Flash`<br>`GLM-5.2`<br>`GLM-5-Turbo` | 支持别名映射，如 `glm-4-plus`、`claude-3-7-sonnet-20250219` |
 
 ---
@@ -103,7 +103,7 @@ python main.py serve
 #### 1. Cherry Studio
 1. 打开 **设置** → **模型服务商** → 点击 **添加**，类型选择 **OpenAI**。
 2. **API 域名**：填入 `http://127.0.0.1:3335/v1`。
-3. **API 密钥**：未设置网关密钥时可填任意字符（如 `sk-zcode`）。
+3. **API 密钥**：填入后台自动生成的密钥（在管理后台点击右上角【API 反代接入】即可一键复制，如 `sk-zcode2api-...`；由于 Cherry Studio 校验非空，请勿留空）。
 4. **模型**：点击【添加模型】，输入 `GLM-5.3` 和 `GLM-5.3-Flash`，勾选启用并在右侧**勾选「视觉」**（支持识图）。
 
 #### 2. NextChat (ChatGPT-Next-Web)

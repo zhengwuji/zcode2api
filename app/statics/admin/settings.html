@@ -26,9 +26,13 @@
       <input class="input" id="admin-key" type="text" placeholder="后台密码">
     </div>
     <div class="settings-row">
-      <label>网关 API Key（可选）</label>
-      <div class="hint">设置后，调用 <code>/v1/messages</code> 须携带 <code>Authorization: Bearer &lt;key&gt;</code> 或 <code>x-api-key</code>。留空则不校验。</div>
-      <input class="input" id="gateway-key" type="text" placeholder="留空表示不启用">
+      <label>网关 API Key</label>
+      <div class="hint">用于 Cherry Studio、Cursor、NextChat、VS Code 等客户端接入（需携带 <code>Authorization: Bearer &lt;key&gt;</code>）。系统默认已随机生成，您可复制使用，亦可随时修改或重新生成。</div>
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center">
+        <input class="input" id="gateway-key" type="text" placeholder="sk-zcode2api-..." style="flex:1;font-family:ui-monospace,monospace;font-size:13px">
+        <button type="button" class="dialog-btn" style="background:#f3f4f6;color:#111827;border:1px solid #d1d5db;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap" onclick="copyGatewayKeySettings()">复制</button>
+        <button type="button" class="dialog-btn" style="background:#e0e7ff;color:#3730a3;border:1px solid #c7d2fe;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap" onclick="regenerateGatewayKeySettings()">随机生成</button>
+      </div>
     </div>
     <div class="settings-row">
       <label>额度刷新间隔（秒）</label>
@@ -36,7 +40,7 @@
       <input class="input" id="quota-interval" type="number" min="0" step="5" placeholder="60">
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
-      <button onclick="saveSettings()" class="dialog-btn dialog-btn-primary">保存</button>
+      <button onclick="saveSettings()" class="dialog-btn dialog-btn-primary">保存设置</button>
     </div>
   </div>
 
@@ -44,9 +48,9 @@
     <div class="section-title" style="margin-bottom:12px">使用说明</div>
     <div class="hint" style="line-height:1.9">
       · 在「账号池」粘贴 Coding Plan JWT 或 API Key 即可加入轮询。<br>
-      · 请求按 round-robin 分发；某账号额度用完会自动切到下一个账号。<br>
-      · 账号额度、状态在「账号池」页实时刷新展示。<br>
-      · 对话端点：<code id="endpoint">/v1/messages</code>（兼容 Anthropic Messages 协议）。
+      · 请求按 round-robin 自动分发；某账号额度用完或失效会自动切到下一个账号。<br>
+      · 账号额度、套餐状态在「账号池」页实时刷新展示。<br>
+      · 对话端点：支持标准 OpenAI 协议（<code>/v1/chat/completions</code>）与 Anthropic 协议（<code>/v1/messages</code>）。
     </div>
   </div>
 </main>
@@ -59,7 +63,6 @@
   await renderAdminHeader();
   const key=await adminKey.get();
   if(!key||!await verifyKey(ADMIN_API+'/verify',key).catch(()=>false))return location.href='/admin/login';
-  document.getElementById('endpoint').textContent=location.origin+'/v1/messages';
   load();
 })();
 
@@ -72,11 +75,39 @@ async function load(){
   }catch(e){showToast('加载失败: '+e.message,'error');}
 }
 
+async function copyGatewayKeySettings(){
+  const val=document.getElementById('gateway-key').value.trim();
+  if(!val)return showToast('API Key 为空','error');
+  try{
+    await navigator.clipboard.writeText(val);
+    showToast('API Key 已复制到剪贴板','success');
+  }catch(e){
+    const inp=document.getElementById('gateway-key');
+    inp.select();
+    document.execCommand('copy');
+    showToast('API Key 已复制','success');
+  }
+}
+
+async function regenerateGatewayKeySettings(){
+  if(!confirm('确定要随机重新生成网关 API Key 吗？重新生成后请记得在各客户端同步更新。'))return;
+  try{
+    const res=await api('POST','/settings/regenerate-key');
+    if(res&&res.gateway_key){
+      document.getElementById('gateway-key').value=res.gateway_key;
+      showToast('已随机生成并保存新 API Key','success');
+    }
+  }catch(e){
+    showToast('生成失败: '+e.message,'error');
+  }
+}
+
 async function saveSettings(){
   const admin_key=document.getElementById('admin-key').value.trim();
   const gateway_key=document.getElementById('gateway-key').value.trim();
   const quota_refresh_interval=parseInt(document.getElementById('quota-interval').value,10);
   if(!admin_key)return showToast('后台密码不能为空','error');
+  if(!gateway_key)return showToast('网关 API Key 不能为空','error');
   if(isNaN(quota_refresh_interval)||quota_refresh_interval<0)return showToast('刷新间隔必须是非负整数','error');
   try{
     await api('PUT','/settings',{admin_key,gateway_key,quota_refresh_interval});

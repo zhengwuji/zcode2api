@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 import threading
 import time
@@ -83,7 +84,11 @@ class Store:
             meta_rows = conn.execute(f"SELECT key, value FROM {_META}").fetchall()
             self._settings = {r["key"]: r["value"] for r in meta_rows}
             self._settings.setdefault("admin_key", settings.DEFAULT_ADMIN_KEY)
-            self._settings.setdefault("gateway_key", "")
+            current_gw = (self._settings.get("gateway_key") or "").strip()
+            if not current_gw:
+                current_gw = f"sk-zcode2api-{secrets.token_hex(16)}"
+                self._settings["gateway_key"] = current_gw
+                self._set_meta("gateway_key", current_gw)
             self._settings.setdefault("quota_refresh_interval", str(settings.QUOTA_REFRESH_INTERVAL))
 
             self._accounts = {p: [] for p in PROVIDERS}
@@ -152,7 +157,20 @@ class Store:
         return str(self.get_setting("admin_key", settings.DEFAULT_ADMIN_KEY) or "")
 
     def gateway_key(self) -> str:
-        return str(self.get_setting("gateway_key", "") or "")
+        with self._lock:
+            key = str(self._settings.get("gateway_key", "") or "").strip()
+            if not key:
+                key = f"sk-zcode2api-{secrets.token_hex(16)}"
+                self._settings["gateway_key"] = key
+                self._set_meta("gateway_key", key)
+            return key
+
+    def regenerate_gateway_key(self) -> str:
+        with self._lock:
+            key = f"sk-zcode2api-{secrets.token_hex(16)}"
+            self._settings["gateway_key"] = key
+            self._set_meta("gateway_key", key)
+            return key
 
     def quota_refresh_interval(self) -> int:
         try:
