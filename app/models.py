@@ -60,6 +60,11 @@ class Account:
     display_name: str = ""
     user_id: str = ""
 
+    # 当前使用与切换状态记录
+    is_current: bool = False
+    last_switch_reason: str = ""
+    last_switched_at: float | None = None
+
     @staticmethod
     def create(provider: str, name: str, secret: str) -> "Account":
         secret = (secret or "").strip()
@@ -122,6 +127,9 @@ class Account:
             "cooling_until": self.cooling_until,
             "last_error": self.last_error,
             "created_at": self.created_at,
+            "is_current": self.is_current,
+            "last_switch_reason": self.last_switch_reason,
+            "last_switched_at": self.last_switched_at,
         }
 
     def effective_status(self, now: float | None = None) -> str:

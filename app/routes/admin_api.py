@@ -32,6 +32,7 @@ async def verify():
 @router.get("/accounts")
 async def list_accounts():
     now = time.time()
+    active_id = store.get_active_account_id()
     accounts = [a.public_view() for a in store.list_accounts()]
     stats = {"total": len(accounts), "active": 0, "exhausted": 0,
              "cooling": 0, "invalid": 0, "disabled": 0,
@@ -42,7 +43,31 @@ async def list_accounts():
             stats[st] += 1
         stats["calls"] += a["use_count"]
         stats["fail"] += a["fail_count"]
-    return {"accounts": accounts, "stats": stats, "providers": list(PROVIDERS), "ts": now}
+    return {"accounts": accounts, "stats": stats, "providers": list(PROVIDERS), "active_id": active_id, "ts": now}
+
+
+# ── 手动切换主选账号 ─────────────────────────────────────────────────────────
+@router.post("/accounts/{account_id}/switch")
+async def switch_account(account_id: str):
+    acc = store.find_any(account_id)
+    if not acc:
+        raise HTTPException(404, "账号不存在")
+    store.set_active_account(account_id, "在网页后台手动切换")
+    try:
+        from ..zcode_importer import sync_zcode_config_and_proxy
+        from proxy.account_info import update_config_yaml_provider
+        sync_zcode_config_and_proxy({
+            "provider": acc.provider,
+            "name": acc.name,
+            "secret": acc.secret,
+            "user_id": acc.id,
+        })
+        update_config_yaml_provider(acc.provider, target_file="config.yaml")
+        update_config_yaml_provider(acc.provider, port=8085, target_file="config_backend.yaml")
+    except Exception:
+        pass
+    return {"ok": True, "active_id": account_id, "name": acc.name}
+
 
 
 @router.get("/status")

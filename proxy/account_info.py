@@ -593,6 +593,7 @@ def do_switch_account():
         "secret": target_acc.secret,
         "user_id": target_acc.id,
     }
+    store.set_active_account(target_acc.id, switched_out_reason="控制台手动切换")
     sync_zcode_config_and_proxy(acc_dict)
     update_config_yaml_provider(target_acc.provider, target_file="config.yaml")
     update_config_yaml_provider(target_acc.provider, port=8085, target_file="config_backend.yaml")
@@ -659,6 +660,7 @@ def auto_switch_next(reason: str = "上游连接异常") -> tuple[bool, str, str
         "secret": target_acc.secret,
         "user_id": target_acc.id,
     }
+    store.set_active_account(target_acc.id, switched_out_reason=reason)
     sync_zcode_config_and_proxy(acc_dict)
     update_config_yaml_provider(target_acc.provider, target_file="config.yaml")
     update_config_yaml_provider(target_acc.provider, port=8085, target_file="config_backend.yaml")
@@ -708,6 +710,7 @@ def do_check_and_auto_switch():
         "secret": target_acc.secret,
         "user_id": target_acc.id,
     }
+    store.set_active_account(target_acc.id, switched_out_reason="启动自检: 额度已用尽，自动轮换")
     sync_zcode_config_and_proxy(acc_dict)
     update_config_yaml_provider(target_acc.provider, target_file="config.yaml")
     update_config_yaml_provider(target_acc.provider, port=8085, target_file="config_backend.yaml")

@@ -108,6 +108,176 @@
       color: #dc2626;
       font-weight: 500;
     }
+    /* 当前活动账号横幅 */
+    .active-account-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding: 14px 18px;
+      background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 50%, #f0fdf4 100%);
+      border: 1.5px solid #86efac;
+      border-radius: 12px;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.09);
+      animation: fadeInBanner 0.4s ease-out;
+    }
+    @keyframes fadeInBanner {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .active-account-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+      flex: 1;
+    }
+    .active-account-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: #15803d;
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 650;
+      border-radius: 999px;
+      letter-spacing: 0.02em;
+      box-shadow: 0 2px 6px rgba(21, 128, 61, 0.25);
+      flex-shrink: 0;
+    }
+    .active-pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #86efac;
+      box-shadow: 0 0 0 0 rgba(134, 239, 172, 0.7);
+      animation: pulseGreen 1.6s infinite;
+    }
+    @keyframes pulseGreen {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(134, 239, 172, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(134, 239, 172, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(134, 239, 172, 0); }
+    }
+    .active-account-info {
+      min-width: 0;
+      flex: 1;
+    }
+    .active-account-name-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .active-account-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .active-account-sub {
+      font-size: 12px;
+      color: #334155;
+      margin-top: 3px;
+    }
+    .active-account-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .active-account-live-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11.5px;
+      color: #15803d;
+      font-weight: 500;
+    }
+
+    /* 表格行当前账号高亮 */
+    tr.row-active-current {
+      background: #f0fdf4 !important;
+      position: relative;
+    }
+    tr.row-active-current td:first-child {
+      border-left: 4px solid #16a34a !important;
+    }
+    .badge-current-active {
+      display: inline-flex;
+      align-items: center;
+      gap: 4.5px;
+      padding: 1px 7px;
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      color: #15803d;
+      font-size: 11px;
+      font-weight: 650;
+      border-radius: 999px;
+      margin-left: 6px;
+      box-shadow: 0 1px 2px rgba(22, 163, 74, 0.1);
+    }
+    .badge-current-active .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #16a34a;
+      box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+      animation: pulseGreen 1.6s infinite;
+    }
+
+    /* 被切原因警示标 */
+    .switch-reason-box {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 5px;
+      padding: 2.5px 8px;
+      background: #fffbeb;
+      border: 1px solid #fef08a;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #b45309;
+      line-height: 1.4;
+      max-width: 440px;
+      white-space: normal;
+      word-break: break-all;
+    }
+    .switch-reason-icon {
+      font-size: 12px;
+      line-height: 1;
+    }
+    .switch-reason-text {
+      font-weight: 550;
+    }
+    .switch-reason-time {
+      color: #92400e;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10.5px;
+      margin-left: 2px;
+    }
+
+    /* 快捷设为主选按钮 */
+    .btn-set-active {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #475569;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-set-active:hover {
+      background: #f0fdf4;
+      border-color: #86efac;
+      color: #15803d;
+    }
   </style>
 </head>
 <body>
@@ -152,6 +322,9 @@
       </button>
     </div>
   </div>
+
+  <!-- 当前正在使用账号 高亮横幅 -->
+  <div id="active-account-banner" class="active-account-card" style="display:none"></div>
 
   <div class="section-head"><div class="section-title">账户概览</div></div>
   <div class="stat-grid">
@@ -390,6 +563,7 @@
 <script>
 let allAccounts=[], curFilter='all', _cb=null, _editId='', _timer=null;
 let currentGatewayKey='', _claimAccId='', _selectedPlanId='';
+let lastActiveId=null;
 const refreshing=new Set();
 
 const STATUS_LABEL={active:'正常',exhausted:'用完',cooling:'限流',invalid:'异常',disabled:'禁用'};
@@ -405,7 +579,7 @@ const STATUS_LABEL={active:'正常',exhausted:'用完',cooling:'限流',invalid:
 
 function startPolling(){
   if(_timer)clearInterval(_timer);
-  _timer=setInterval(()=>{ if(!document.hidden && !anyModalOpen()) load(true); },5000);
+  _timer=setInterval(()=>{ if(!document.hidden && !anyModalOpen()) load(true); },3000);
 }
 function anyModalOpen(){return!!document.querySelector('.modal-overlay.open');}
 
@@ -453,10 +627,118 @@ async function refreshClaimAll(){
   }catch(e){showToast('检测失败: '+e.message,'error');}
 }
 
+function fmtReasonTime(ts){
+  if(!ts) return '';
+  try{
+    const d = new Date(Number(ts) > 1e11 ? Number(ts) : Number(ts) * 1000);
+    if(isNaN(d.getTime())) return '';
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  }catch(e){ return ''; }
+}
+
+function renderCurrentAccountBanner(a){
+  const el = document.getElementById('active-account-banner');
+  if(!el) return;
+  if(!a){
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'flex';
+
+  let primary = a.email || '';
+  if(!primary && a.phone) primary = a.phone;
+  if(!primary) primary = a.display_name || a.name || a.token_masked;
+  const initial = (primary[0] || (a.provider === 'bigmodel' ? 'B' : 'Z')).toUpperCase();
+  const planTag = getPlanTag(a);
+
+  const idents = [];
+  if(a.phone) idents.push(`手机: ${a.phone}`);
+  if(a.email && a.email !== primary) idents.push(`邮箱: ${a.email}`);
+  if(a.display_name && a.display_name !== primary && a.display_name !== a.email) idents.push(`昵称: ${a.display_name}`);
+  const metaStr = idents.join(' · ') || a.name;
+
+  const provTag = a.provider === 'bigmodel'
+    ? '<span class="badge" style="background:#ede9fe;color:#6d28d9;border:1px solid #ddd6fe">BigModel (国内)</span>'
+    : '<span class="badge" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0">z.ai (国际)</span>';
+  const modeTag = `<span class="badge badge-${a.mode}">${a.mode==='jwt'?'JWT 套餐':'API Key 直连'}</span>`;
+
+  let quotaSummary = '';
+  if(a.mode === 'apiKey'){
+    quotaSummary = '开发者 API Key 全模型直连畅通';
+  } else if(a.quota && Object.keys(a.quota).length){
+    const qParts = [];
+    for(const [m, q] of Object.entries(a.quota)){
+      if(q && q.remaining !== undefined && q.remaining !== null){
+        if(q.remaining === -1){
+          qParts.push(`${m}: 畅通可用`);
+        } else {
+          qParts.push(`${m}: ${formatUnits(q.remaining)}/${formatUnits(q.total)}`);
+        }
+      }
+    }
+    if(qParts.length) quotaSummary = qParts.slice(0, 3).join(' · ');
+  }
+  if(!quotaSummary) quotaSummary = '额度正常可用';
+
+  el.innerHTML = `
+    <div class="active-account-left">
+      <div class="active-account-status-badge">
+        <span class="active-pulse-dot"></span>
+        <span>当前正在使用的账号</span>
+      </div>
+      <div style="width:40px;height:40px;border-radius:12px;background:#fbf7ee;border:1px solid #f3eccf;color:#78350f;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.04)">
+        ${esc(initial)}
+      </div>
+      <div class="active-account-info">
+        <div class="active-account-name-row">
+          <span class="active-account-title">${esc(primary)}</span>
+          <span style="font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569">${esc(planTag)}</span>
+          ${provTag}
+          ${modeTag}
+        </div>
+        <div class="active-account-sub">
+          <span>${esc(metaStr)}</span>
+          <span style="margin:0 6px;color:#cbd5e1">|</span>
+          <span style="font-weight:600;color:#0f172a">${esc(quotaSummary)}</span>
+        </div>
+      </div>
+    </div>
+    <div class="active-account-right">
+      <div class="active-account-live-indicator">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span>代理请求正从此账号发出 · 遇中断/耗尽秒级自动切号</span>
+      </div>
+    </div>
+  `;
+}
+
+async function switchToAccount(id){
+  const a = allAccounts.find(x => x.id === id);
+  const name = a ? (a.email || a.name) : id;
+  try{
+    await api('POST', `/accounts/${id}/switch`);
+    showToast(`已成功切换至主选账号：${name}`,'success');
+    await load();
+  }catch(e){
+    showToast(`切换失败: ${e.message}`,'error');
+  }
+}
+
 async function load(silent){
   try{
     const d=await api('GET','/accounts');
     allAccounts=d.accounts||[];
+    const activeId = d.active_id || (allAccounts.find(a => a.is_current) || {}).id;
+
+    if (lastActiveId !== null && activeId && lastActiveId !== activeId) {
+      const newAcc = allAccounts.find(a => a.id === activeId);
+      const name = newAcc ? (newAcc.email || newAcc.name) : activeId;
+      showToast(`⚡ 账号已自动切换至：${name}`,'info');
+    }
+    lastActiveId = activeId;
+
+    const currentAcc = allAccounts.find(a => a.id === activeId || a.is_current);
+    renderCurrentAccountBanner(currentAcc);
     renderStats(d.stats||{});
     renderFilters();
     renderTable();
@@ -547,14 +829,12 @@ function getPlanExpires(a){
 }
 
 function renderAccountCell(a){
-  // 优先展示真实邮箱；若无邮箱则优先展示手机号，方便用户一眼识别账号身份
   let primary = a.email || '';
   if(!primary && a.phone) primary = a.phone;
   if(!primary) primary = a.display_name || a.name || a.token_masked;
   
   const initial = (primary[0] || (a.provider === 'bigmodel' ? 'B' : 'Z')).toUpperCase();
   const planTag = getPlanTag(a);
-  const expStr = getPlanExpires(a);
 
   const idents = [];
   if(a.phone) idents.push(`手机: ${a.phone}`);
@@ -563,23 +843,40 @@ function renderAccountCell(a){
   if(!idents.length && a.token_masked) idents.push(a.token_masked);
   const fullMeta = idents.length ? idents.join(' · ') : '无额外绑定信息';
 
-  // 头像采用 Z-Accounts 经典暖色圆角方块设计
   const avatarFallback = `<div style="width:40px;height:40px;border-radius:12px;background:#fbf7ee;border:1px solid #f3eccf;color:#78350f;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">${esc(initial)}</div>`;
   const avatarImg = a.avatar
     ? `<img src="${esc(a.avatar)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:40px;height:40px;border-radius:12px;object-fit:cover;border:1px solid #e2e8f0;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.03)" alt="avatar" /><div style="display:none;width:40px;height:40px;border-radius:12px;background:#fbf7ee;border:1px solid #f3eccf;color:#78350f;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">${esc(initial)}</div>`
     : avatarFallback;
 
+  const currentBadge = a.is_current
+    ? `<span class="badge-current-active"><span class="pulse-dot"></span>当前正在使用</span>`
+    : '';
+
+  let switchReasonHtml = '';
+  if (a.last_switch_reason && !a.is_current) {
+    const timeStr = a.last_switched_at ? fmtReasonTime(a.last_switched_at) : '';
+    switchReasonHtml = `
+      <div class="switch-reason-box" title="${esc(a.last_switch_reason)}">
+        <span class="switch-reason-icon">⚠️</span>
+        <span class="switch-reason-text">被切原因: ${esc(a.last_switch_reason)}</span>
+        ${timeStr ? `<span class="switch-reason-time">(${timeStr})</span>` : ''}
+      </div>
+    `;
+  }
+
   return `
-    <div style="display:flex;align-items:center;gap:12px;min-width:320px">
+    <div style="display:flex;align-items:flex-start;gap:12px;min-width:320px">
       ${avatarImg}
       <div style="min-width:0;flex:1">
-        <div style="display:flex;align-items:center;gap:7px">
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
           <span style="font-size:14.5px;font-weight:600;color:#0f172a;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(primary)}">${esc(primary)}</span>
           <span style="display:inline-block;font-size:10.5px;font-weight:550;line-height:17px;padding:0 6px;border-radius:5px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569">${esc(planTag)}</span>
+          ${currentBadge}
         </div>
-        <div style="font-size:12px;line-height:1.4;color:#4338ca;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(fullMeta)}">
+        <div style="font-size:12px;line-height:1.4;color:#4338ca;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(fullMeta)}">
           ${esc(fullMeta)}
         </div>
+        ${switchReasonHtml}
       </div>
     </div>
   `;
@@ -590,7 +887,9 @@ function rowHtml(a){
   const canRefresh=isJwt||(a.provider==='bigmodel'&&a.api_key);
   const isDisabled=a.status==='disabled';
   const loading=refreshing.has(a.id);
-  return `<tr>
+  const rowClass = a.is_current ? ' class="row-active-current"' : '';
+
+  return `<tr${rowClass}>
     <td>${renderAccountCell(a)}</td>
     <td class="table-center">${a.provider === 'bigmodel' ? '<span class="badge" style="background:#f5f3ff;color:#6d28d9">BigModel (国内)</span>' : '<span class="badge" style="background:#f0fdf4;color:#15803d">z.ai (国际)</span>'}</td>
     <td class="table-center"><span class="badge badge-${a.mode}">${isJwt?'JWT':'Key'}</span></td>
@@ -600,6 +899,7 @@ function rowHtml(a){
     <td class="table-center" style="color:#9a9a9a">${a.fail_count||0}</td>
     <td style="font-size:12px;color:#9a9a9a">${fmtDate(a.last_used_at)}</td>
     <td><div class="row-actions">
+      ${!a.is_current ? `<button onclick="switchToAccount('${a.id}')" class="btn-set-active" title="设为当前使用的账号">设为主选</button>` : ''}
       ${canRefresh?`<button onclick="refreshOne('${a.id}')" class="row-icon-btn${loading?' is-loading':''}" title="刷新额度"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.6-4.6"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.6 4.6"/><path d="M20 20v-5h-5"/></svg></button>`:''}
       ${isJwt?`<button onclick="openClaimModal('${a.id}')" class="row-icon-btn" title="检测资格与领取套餐"><svg viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg></button>`:''}
       <button onclick="toggleEnabled('${a.id}',${isDisabled})" class="row-icon-btn" title="${isDisabled?'恢复':'禁用'}">

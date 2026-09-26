@@ -267,10 +267,19 @@ async def proxy_all(request: Request, path: str):
                 await client.aclose()
 
                 print(f"| #{req_num:03d} | {req_time} | {model_name:<13} | ⚠️ 触发上游中断 (HTTP {resp.status_code})")
-                print(f"  [⚡ 自动自愈] 正在自动轮换可用账号并重新拉起重试 (第 {attempt}/{MAX_HEAL_ATTEMPTS} 次)...")
-                
+                if resp.status_code == 502:
+                    switch_reason = "上游连接中断 (502 Bad Gateway)"
+                elif resp.status_code == 504:
+                    switch_reason = "上游服务网关超时 (HTTP 504)"
+                elif resp.status_code == 401:
+                    switch_reason = "上游凭证已失效 (HTTP 401)"
+                elif resp.status_code == 429:
+                    switch_reason = "上游请求频次限流 (HTTP 429)"
+                else:
+                    switch_reason = f"上游服务异常 (HTTP {resp.status_code})"
+
                 async with _backend_lock:
-                    ok, new_acc, new_prov = auto_switch_next(f"HTTP_{resp.status_code}")
+                    ok, new_acc, new_prov = auto_switch_next(switch_reason)
                     _start_backend_process()
                     await _wait_backend_ready(5.0)
 
@@ -298,7 +307,7 @@ async def proxy_all(request: Request, path: str):
                 print(f"| #{req_num:03d} | {req_time} | {model_name:<13} | ⚠️ 流首包读取异常: {stream_err}")
                 print(f"  [⚡ 自动自愈] 触发自动换号重试 (第 {attempt}/{MAX_HEAL_ATTEMPTS} 次)...")
                 async with _backend_lock:
-                    auto_switch_next("流首包异常")
+                    auto_switch_next(f"流首包读取异常 ({stream_err})")
                     _start_backend_process()
                     await _wait_backend_ready(5.0)
                 await asyncio.sleep(0.4)
@@ -336,7 +345,7 @@ async def proxy_all(request: Request, path: str):
             print(f"| #{req_num:03d} | {req_time} | {model_name:<13} | ⚠️ 连接异常: {conn_err}")
             print(f"  [⚡ 自动自愈] 触发自动换号重试 (第 {attempt}/{MAX_HEAL_ATTEMPTS} 次)...")
             async with _backend_lock:
-                auto_switch_next(str(conn_err))
+                auto_switch_next(f"网络连接异常 ({conn_err})")
                 _start_backend_process()
                 await _wait_backend_ready(5.0)
             await asyncio.sleep(0.4)

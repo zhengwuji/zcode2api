@@ -185,6 +185,9 @@ def _select_candidate(preferred_provider: str, tried: set[str], model: str = "")
 def _mark(account: Account, status_value: str, error: str | None = None) -> None:
     account.status = status_value
     account.last_error = error
+    if error:
+        account.last_switch_reason = error
+        account.last_switched_at = time.time()
     if status_value == Status.COOLING:
         account.cooling_until = time.time() + settings.COOLING_SECONDS
     store.update_account(account)
@@ -470,6 +473,7 @@ async def _try_account(
             if account.status in (Status.COOLING, Status.EXHAUSTED):
                 account.status = Status.ACTIVE
                 account.cooling_until = None
+            store.set_active_account(account.id)
             store.update_account(account)
             asyncio.create_task(_safe_refresh(account))
 
@@ -532,6 +536,7 @@ async def _try_account(
         if account.status in (Status.COOLING, Status.EXHAUSTED):
             account.status = Status.ACTIVE
             account.cooling_until = None
+        store.set_active_account(account.id)
         store.update_account(account)
         asyncio.create_task(_safe_refresh(account))
 

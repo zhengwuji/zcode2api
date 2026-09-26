@@ -341,24 +341,99 @@ class Store:
     def set_auto_switch(self, enabled: bool) -> None:
         self.set_setting("auto_switch", "true" if enabled else "false")
 
+    # ── 活动账号与切换记录 ───────────────────────────────────────────────────
+    def get_active_account_id(self) -> str:
+        with self._lock:
+            # 1. 优先匹配本地真实凭据 ~/.zcode-proxy/credentials.json
+            try:
+                from proxy.account_info import get_account_info
+                info = get_account_info() or {}
+                curr_token = info.get("jwt") or info.get("apiKey") or ""
+                if curr_token:
+                    for p in PROVIDERS:
+                        for a in self._accounts[p]:
+                            if a.secret == curr_token or a.jwt_token == curr_token or a.api_key == curr_token:
+                                return a.id
+            except Exception:
+                pass
+
+            # 2. 从 meta 中读取记录的 active_account_id
+            aid = str(self.get_setting("active_account_id", "") or "").strip()
+            if aid:
+                for p in PROVIDERS:
+                    for a in self._accounts[p]:
+                        if a.id == aid:
+                            return a.id
+
+            # 3. 兜底回退：第一个健康可用账号
+            now = time.time()
+            for p in PROVIDERS:
+                for a in self._accounts[p]:
+                    if a.is_selectable(now):
+                        return a.id
+
+            # 4. 任意第一个账号
+            for p in PROVIDERS:
+                if self._accounts[p]:
+                    return self._accounts[p][0].id
+            return ""
+
+    def set_active_account(self, target_id: str, switched_out_reason: str = "") -> None:
+        """设置当前活动账号，并将切换原因记录到被换下的旧账号上。"""
+        with self._lock:
+            old_id = self.get_active_account_id()
+            now = time.time()
+            if old_id and old_id != target_id:
+                old_acc = self.find_any(old_id)
+                if old_acc:
+                    if switched_out_reason:
+                        old_acc.last_switch_reason = switched_out_reason
+                    old_acc.last_switched_at = now
+                    old_acc.is_current = False
+                    self._persist_account(old_acc)
+
+            self.set_setting("active_account_id", target_id)
+            target_acc = self.find_any(target_id)
+            if target_acc:
+                target_acc.is_current = True
+                self._persist_account(target_acc)
+
+    def record_switch_reason(self, account_id: str, reason: str) -> None:
+        """为特定账号记录被切换的原因及时间戳。"""
+        with self._lock:
+            acc = self.find_any(account_id)
+            if acc:
+                acc.last_switch_reason = reason
+                acc.last_switched_at = time.time()
+                self._persist_account(acc)
+
     # ── 账号读取 ─────────────────────────────────────────────────────────────
     def list_accounts(self, provider: str | None = None) -> list[Account]:
         with self._lock:
+            active_id = self.get_active_account_id()
+            for p in PROVIDERS:
+                for a in self._accounts[p]:
+                    a.is_current = (a.id == active_id)
             if provider:
                 return list(self._accounts.get(provider, []))
             return [a for p in PROVIDERS for a in self._accounts[p]]
 
     def find(self, provider: str, id_or_name: str) -> Account | None:
         with self._lock:
-            return self._find_locked(provider, id_or_name)
+            acc = self._find_locked(provider, id_or_name)
+            if acc:
+                acc.is_current = (acc.id == self.get_active_account_id())
+            return acc
 
     def find_any(self, id_or_name: str) -> Account | None:
         with self._lock:
+            active_id = self.get_active_account_id()
             for p in PROVIDERS:
                 for a in self._accounts[p]:
-                    if a.id == id_or_name:
+                    if a.id == id_or_name or a.name == id_or_name:
+                        a.is_current = (a.id == active_id)
                         return a
-        return None
+            return None
 
     def _find_locked(self, provider: str, id_or_name: str) -> Account | None:
         for a in self._accounts.get(provider, []):
