@@ -16,3 +16,4 @@ data_test/
 logs/
 js-code/
 scratch/
+proxy/config_backend.yaml

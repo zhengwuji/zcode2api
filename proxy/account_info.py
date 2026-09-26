@@ -594,6 +594,8 @@ def do_switch_account():
         "user_id": target_acc.id,
     }
     sync_zcode_config_and_proxy(acc_dict)
+    update_config_yaml_provider(target_acc.provider, target_file="config.yaml")
+    update_config_yaml_provider(target_acc.provider, port=8085, target_file="config_backend.yaml")
 
     exe_path = Path(__file__).resolve().parent / "zcode-proxy.exe"
     if exe_path.exists():
@@ -606,6 +608,68 @@ def do_switch_account():
     print("\n========================================================================")
     print(f"🎉 切换成功！当前已激活生效账号: {target_acc.name}")
     print("========================================================================")
+
+def update_config_yaml_provider(provider: str, port: int | None = None, target_file: str = "config.yaml"):
+    """动态同步 provider 与端口到 config.yaml，防止账号与上游平台不一致导致401或502。"""
+    cfg_file = Path(__file__).parent / target_file
+    if not cfg_file.exists():
+        return
+    try:
+        import re
+        txt = cfg_file.read_text(encoding="utf-8")
+        txt = re.sub(r'(?m)^provider:\s*[a-zA-Z0-9_-]+', f'provider: {provider}', txt)
+        if port is not None:
+            txt = re.sub(r'(?m)^\s*port:\s*\d+', f'  port: {port}', txt)
+        cfg_file.write_text(txt, encoding="utf-8")
+    except Exception:
+        pass
+
+def auto_switch_next(reason: str = "上游连接异常") -> tuple[bool, str, str]:
+    """遇上游 502/中断/异常时，秒级自动轮换至下一个健康账号，优先跨平台容灾（zai -> bigmodel）。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from app.store import store
+    from app.zcode_importer import sync_zcode_config_and_proxy
+
+    info = get_account_info() or {}
+    curr_token = info.get("jwt") or info.get("apiKey") or ""
+    curr_prov = info.get("provider") or "zai"
+
+    accounts = store.list_accounts()
+    selectable = [a for a in accounts if a.is_selectable()]
+    if not selectable:
+        return False, "无可用账号", curr_prov
+
+    other_candidates = [a for a in selectable if a.secret != curr_token and a.jwt_token != curr_token and a.api_key != curr_token]
+    if not other_candidates:
+        other_candidates = selectable
+
+    # 遇网络异常且当前是 zai 时，优先切换至国内稳定的 bigmodel 节点！
+    if curr_prov == "zai":
+        bm_candidates = [a for a in other_candidates if a.provider == "bigmodel"]
+        if bm_candidates:
+            target_acc = bm_candidates[0]
+        else:
+            target_acc = other_candidates[0]
+    else:
+        target_acc = other_candidates[0]
+
+    acc_dict = {
+        "provider": target_acc.provider,
+        "name": target_acc.name,
+        "secret": target_acc.secret,
+        "user_id": target_acc.id,
+    }
+    sync_zcode_config_and_proxy(acc_dict)
+    update_config_yaml_provider(target_acc.provider, target_file="config.yaml")
+    update_config_yaml_provider(target_acc.provider, port=8085, target_file="config_backend.yaml")
+
+    exe_path = Path(__file__).resolve().parent / "zcode-proxy.exe"
+    if exe_path.exists():
+        import subprocess
+        subprocess.run([str(exe_path), "auth", "login", target_acc.provider, "--import"],
+                       capture_output=True, text=True, cwd=str(Path(__file__).resolve().parent))
+
+    return True, target_acc.name, target_acc.provider
 
 def do_check_and_auto_switch():
     """在启动代理前检查当前主选账号是否有效，若无额度则秒级自动切换到可用账号。"""
@@ -645,6 +709,8 @@ def do_check_and_auto_switch():
         "user_id": target_acc.id,
     }
     sync_zcode_config_and_proxy(acc_dict)
+    update_config_yaml_provider(target_acc.provider, target_file="config.yaml")
+    update_config_yaml_provider(target_acc.provider, port=8085, target_file="config_backend.yaml")
     exe_path = Path(__file__).resolve().parent / "zcode-proxy.exe"
     if exe_path.exists():
         import subprocess
