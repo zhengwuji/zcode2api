@@ -524,6 +524,7 @@ async def proxy_all(request: Request, path: str):
                         print(f"\r| #{req_num:03d} | {req_time} | {model_name:<13} | {acc_label} | ⚠️ 流式中途中断 (已平滑收尾，已输出 {token_count} tokens)       ", flush=True)
                     finally:
                         await client.aclose()
+                        _active_requests = max(0, _active_requests - 1)
 
                 return StreamingResponse(
                     _stream_generator(),
@@ -547,7 +548,8 @@ async def proxy_all(request: Request, path: str):
             status_code=502,
         )
     finally:
-        _active_requests = max(0, _active_requests - 1)
+        if not is_stream:
+            _active_requests = max(0, _active_requests - 1)
 
 
 if __name__ == "__main__":
