@@ -42,7 +42,9 @@ if defined CURR_QUOTA echo %CURR_QUOTA%
 echo  [支持协议] OpenAI (/v1/chat/completions) / Anthropic (/v1/messages)
 echo  [可用模型] GLM-5.3 , GLM-5.3-Flash , GLM-5.2 , GLM-5-Turbo 等
 echo ------------------------------------------------------------------------
-echo  [1] 启动 ZCode 自愈代理服务 (默认 1 - 智能防卡死 + 遇中断自动换号秒级自愈)
+echo  [1] 启动 ZCode 自愈代理服务 (推荐 1 - 实时 Token 吐字监控 + 自动秒切自愈 + 存活心跳)
+echo  [P] 启动调试模式原生代理 (zcode-proxy.exe serve debug 逐请求诊断输出)
+echo  [U] 启动交互式原生终端 (zcode-proxy.exe 官方完整 TUI 控制台)
 echo  [2] 登录新账号 (智谱 BigModel - 浏览器授权并自动入库多账号池)
 echo  [3] 登录新账号 (Z.AI 全球平台 - 浏览器授权并自动入库多账号池)
 echo  [4] 导入/保存 ZCode 账号 (一键捕获本地 ZCode 与 Z-Accounts 全部账号)
@@ -54,7 +56,6 @@ echo  [9] 清理 8080 端口占用 (杀掉残留旧进程)
 echo  [M] 查看与修改后台管理密码 (当前密码: %CURR_ADMIN_KEY%)
 echo  [S] 切换当前活动账号 (查看全部账号列表 / 手动切换 / 自动选优)
 echo  [A] 启动 Web 多账号可视化管理后台 (独立端口 8081)
-echo  [P] 启动调试模式原生代理 (zcode-proxy.exe serve debug 逐请求诊断输出)
 echo  [0] 退出控制台
 ========================================================================
 set "choice=1"
@@ -62,6 +63,8 @@ set /p choice="请输入选项编号 [默认 1，直接回车启动服务]: "
 set "choice=%choice: =%"
 
 if "%choice%"=="1" goto :START_SERVICE
+if /i "%choice%"=="P" goto :RUN_NATIVE_PROXY
+if /i "%choice%"=="U" goto :RUN_TUI_PROXY
 if "%choice%"=="2" goto :LOGIN_BIGMODEL
 if "%choice%"=="3" goto :LOGIN_ZAI
 if "%choice%"=="4" goto :IMPORT_CONFIG
@@ -73,7 +76,6 @@ if "%choice%"=="9" goto :KILL_PORT
 if /i "%choice%"=="M" goto :CHANGE_PASSWORD
 if /i "%choice%"=="S" goto :SWITCH_ACCOUNT
 if /i "%choice%"=="A" goto :OPEN_ADMIN
-if /i "%choice%"=="P" goto :RUN_NATIVE_PROXY
 if "%choice%"=="0" exit /b 0
 
 echo [提示] 输入无效，请重新选择。
@@ -98,6 +100,20 @@ echo ========================================================================
 echo.
 call "%PY_CMD%" account_info.py check-and-auto-switch
 zcode-proxy.exe serve debug config.yaml
+echo.
+echo [提示] 代理服务已停止。
+pause
+goto :MAIN_MENU
+
+:RUN_TUI_PROXY
+echo.
+echo ========================================================================
+echo  启动交互式原生终端 (zcode-proxy.exe)
+echo  进入官方交互式 TUI 界面，可直观查看运行与请求状态。
+echo ========================================================================
+echo.
+call "%PY_CMD%" account_info.py check-and-auto-switch
+zcode-proxy.exe config.yaml
 echo.
 echo [提示] 代理服务已停止。
 pause

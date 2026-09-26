@@ -5,7 +5,7 @@ server:
 auth:
   proxyApiKey: null
 
-provider: zai
+provider: bigmodel
 
 plan: start-plan
 

@@ -819,29 +819,53 @@ def do_manage_accounts():
         print("[错误] 输入无效。")
 
 def do_kill_port(port=8080):
-    """检测并强行终止占用指定端口的进程及 zcode-proxy 残留进程。"""
+    """检测并强行终止占用指定端口的进程及 zcode-proxy 残留进程（纯静默、严禁误杀 PID 0）。"""
+    import os
     import subprocess
     print(f"正在检测并清理 {port} 端口占用...")
     killed_any = False
+    my_pid = os.getpid()
     try:
-        out = subprocess.check_output(f'netstat -ano | findstr ":{port} "', shell=True, text=True, stderr=subprocess.DEVNULL)
-        pids = set()
-        for line in out.splitlines():
-            if "LISTENING" in line:
-                parts = line.strip().split()
-                if len(parts) >= 5:
-                    pids.add(parts[-1])
-        for pid in pids:
-            try:
-                subprocess.run(f"taskkill /f /pid {pid}", shell=True, capture_output=True)
-                print(f"  已终止占用端口的进程 PID: {pid}")
-                killed_any = True
-            except Exception:
-                pass
+        res = subprocess.run(
+            ["netstat", "-aon"],
+            capture_output=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        if res.stdout:
+            out = res.stdout.decode("gbk", errors="ignore")
+            target = f":{port} "
+            pids = set()
+            for line in out.splitlines():
+                if target in line and "LISTENING" in line:
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        try:
+                            p = int(parts[-1])
+                            if p > 4 and p != my_pid:
+                                pids.add(p)
+                        except ValueError:
+                            pass
+            for p in pids:
+                try:
+                    subprocess.run(
+                        ["taskkill", "/F", "/PID", str(p)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    )
+                    print(f"  已终止占用端口的进程 PID: {p}")
+                    killed_any = True
+                except Exception:
+                    pass
     except Exception:
         pass
     try:
-        subprocess.run("taskkill /f /im zcode-proxy.exe", shell=True, capture_output=True)
+        subprocess.run(
+            ["taskkill", "/F", "/IM", "zcode-proxy.exe"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
     except Exception:
         pass
     print(f"[OK] 端口 {port} 与残留代理进程已全部清理完毕。")
