@@ -163,6 +163,9 @@ async def stream_anthropic_to_openai(resp, chat_id: str, model: str):
                 stop_r = (ev.get("delta") or {}).get("stop_reason")
                 finish_r = "stop" if stop_r == "end_turn" else (stop_r or "stop")
                 yield make_openai_chunk(chat_id, model, finish_reason=finish_r)
+            elif etype == "error":
+                err_msg = (ev.get("error") or {}).get("message") or "上游流式传输错误"
+                yield make_openai_chunk(chat_id, model, delta_text=f"\n\n[错误: {err_msg}]", finish_reason="stop")
 
     yield "data: [DONE]\n\n"
 

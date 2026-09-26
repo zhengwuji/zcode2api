@@ -23,32 +23,40 @@ if exist "%~dp0venv\Scripts\python.exe" set "PY_CMD=%~dp0venv\Scripts\python.exe
 cls
 set "CURR_ACCOUNT="
 set "CURR_QUOTA="
+set "CURR_ADMIN_KEY="
 if exist "account_info.py" (
     for /f "delims=" %%i in ('call "%PY_CMD%" account_info.py 2^>nul') do set "CURR_ACCOUNT=%%i"
     for /f "delims=" %%j in ('call "%PY_CMD%" account_info.py quota 2^>nul') do set "CURR_QUOTA=%%j"
+    for /f "delims=" %%k in ('call "%PY_CMD%" account_info.py admin_key 2^>nul') do set "CURR_ADMIN_KEY=%%k"
 )
 if "%CURR_ACCOUNT%"=="" set "CURR_ACCOUNT=[未登录] 尚未绑定任何账号"
+if "%CURR_ADMIN_KEY%"=="" set "CURR_ADMIN_KEY=zcode"
 
 echo ========================================================================
-echo                      ZCode API Gateway 交互控制台
+echo                 ZCode 多账号 API 网关交互控制台 (v2.0)
 echo ========================================================================
 echo  [服务地址] http://127.0.0.1:8080/v1
-echo  [当前账号] %CURR_ACCOUNT%
+echo  [管理后台] http://127.0.0.1:8081/admin (按 A 启动 Web 后台，密码: %CURR_ADMIN_KEY%)
+echo  [账号状态] %CURR_ACCOUNT%
 if defined CURR_QUOTA echo %CURR_QUOTA%
-echo  [支持协议] OpenAI (/v1/chat/completions) ^| Anthropic (/v1/messages)
+echo  [支持协议] OpenAI (/v1/chat/completions) / Anthropic (/v1/messages)
 echo  [可用模型] GLM-5.3 , GLM-5.3-Flash , GLM-5.2 , GLM-5-Turbo 等
 echo ------------------------------------------------------------------------
-echo  [1] 启动代理服务 (默认直接回车启动)
-echo  [2] 登录新账号 (智谱 BigModel - 浏览器一键授权 [国内])
-echo  [3] 登录新账号 (Z.AI 平台 - 浏览器一键授权 [国外])
-echo  [4] 导入已有配置 (从 ~/.zcode/v2/config.json 自动导入)
-echo  [5] 粘贴 URL 登录 (无头/远程服务器手动粘贴授权地址)
-echo  [6] 查看当前登录账号详细信息 (额度看板、有效时间、模型配额)
-echo  [7] 退出当前账号登录 (Auth Logout)
-echo  [8] 检测并领取体验套餐配额 (Claim Packages)
+echo  [1] 启动 ZCode 代理服务 (默认 1 - 原生引擎 + 自动过人机 + 额度优选)
+echo  [2] 登录新账号 (智谱 BigModel - 浏览器授权并自动入库多账号池)
+echo  [3] 登录新账号 (Z.AI 全球平台 - 浏览器授权并自动入库多账号池)
+echo  [4] 导入/保存 ZCode 账号 (一键捕获本地 ZCode 与 Z-Accounts 全部账号)
+echo  [5] 粘贴 URL 登录 (手动粘贴授权重定向地址加入账号池)
+echo  [6] 查看账号池全部账号状态 (多账号列表、额度看板、可用性明细)
+echo  [7] 多账号池维护与管理 (删除指定账号或清空凭据)
+echo  [8] 检测并一键领取全部账号体验套餐配额 (Claim Packages)
 echo  [9] 清理 8080 端口占用 (杀掉残留旧进程)
+echo  [M] 查看与修改后台管理密码 (当前密码: %CURR_ADMIN_KEY%)
+echo  [S] 切换当前活动账号 (查看全部账号列表 / 手动切换 / 自动选优)
+echo  [A] 启动 Web 多账号可视化管理后台 (独立端口 8081)
+echo  [P] 启动详细调试模式 (zcode-proxy.exe serve debug 逐请求诊断输出)
 echo  [0] 退出控制台
-echo ========================================================================
+========================================================================
 set "choice=1"
 set /p choice="请输入选项编号 [默认 1，直接回车启动服务]: "
 set "choice=%choice: =%"
@@ -62,6 +70,10 @@ if "%choice%"=="6" goto :CHECK_STATUS
 if "%choice%"=="7" goto :LOGOUT_ACCOUNT
 if "%choice%"=="8" goto :CLAIM_PACKAGES
 if "%choice%"=="9" goto :KILL_PORT
+if /i "%choice%"=="M" goto :CHANGE_PASSWORD
+if /i "%choice%"=="S" goto :SWITCH_ACCOUNT
+if /i "%choice%"=="A" goto :OPEN_ADMIN
+if /i "%choice%"=="P" goto :RUN_NATIVE_PROXY
 if "%choice%"=="0" exit /b 0
 
 echo [提示] 输入无效，请重新选择。
@@ -70,33 +82,23 @@ goto :MAIN_MENU
 
 :START_SERVICE
 echo.
-echo 正在检查 8080 端口...
-netstat -ano | findstr ":8080 " | findstr "LISTENING" >nul
-if %errorlevel% neq 0 goto :RUN_NOW
-
-echo ------------------------------------------------------------------------
-echo [提示] 检测到 8080 端口已被占用（已有代理在后台运行）
-set "reopt=1"
-set /p reopt="是否强制结束旧进程并重新启动？[1=是，2=返回菜单，默认 1]: "
-set "reopt=%reopt: =%"
-if "%reopt%"=="2" goto :MAIN_MENU
-
-echo 正在清理旧的 zcode-proxy 进程...
-taskkill /f /im zcode-proxy.exe >nul 2>&1
-ping 127.0.0.1 -n 2 >nul
-
-:RUN_NOW
-echo.
-echo ========================================================================
-echo  代理服务正在运行中...
-echo  - 当前账号:       %CURR_ACCOUNT%
-if defined CURR_QUOTA echo %CURR_QUOTA%
-echo  - OpenAI 接口:    http://127.0.0.1:8080/v1
-echo  - Anthropic 接口: http://127.0.0.1:8080/v1
-echo  按 Ctrl+C 可停止代理并返回控制台
-echo ========================================================================
-echo.
+call "%PY_CMD%" account_info.py check-and-auto-switch
+call "%PY_CMD%" account_info.py serve-banner
 zcode-proxy.exe serve config.yaml
+echo.
+echo [提示] 代理服务已停止。
+pause
+goto :MAIN_MENU
+
+:RUN_NATIVE_PROXY
+echo.
+echo ========================================================================
+echo  启动调试模式原生代理 (zcode-proxy.exe serve debug)
+echo  可实时显示每次调用的上游端点、延迟、Token 统计与详细诊断。
+echo ========================================================================
+echo.
+call "%PY_CMD%" account_info.py check-and-auto-switch
+zcode-proxy.exe serve debug config.yaml
 echo.
 echo [提示] 代理服务已停止。
 pause
@@ -106,10 +108,11 @@ goto :MAIN_MENU
 echo.
 echo ========================================================================
 echo  准备登录 智谱 BigModel 账号【国内】
-echo  程序将自动打开浏览器进行 OAuth 授权，完成后将自动保存凭据。
+echo  程序将自动打开浏览器进行 OAuth 授权，完成后将自动保存并并入多账号池。
 echo ========================================================================
 echo.
 zcode-proxy.exe auth login bigmodel
+call "%PY_CMD%" account_info.py sync_current_to_pool
 echo.
 pause
 goto :MAIN_MENU
@@ -118,21 +121,18 @@ goto :MAIN_MENU
 echo.
 echo ========================================================================
 echo  准备登录 Z.AI 平台账号【国外/国际版】
-echo  程序将自动打开浏览器进行 OAuth 授权，完成后将自动保存凭据。
+echo  程序将自动打开浏览器进行 OAuth 授权，完成后将自动保存并并入多账号池。
 echo ========================================================================
 echo.
 zcode-proxy.exe auth login zai
+call "%PY_CMD%" account_info.py sync_current_to_pool
 echo.
 pause
 goto :MAIN_MENU
 
 :IMPORT_CONFIG
 echo.
-echo ========================================================================
-echo  正在从本地 ~/.zcode/v2/config.json 导入配置...
-echo ========================================================================
-echo.
-zcode-proxy.exe auth login bigmodel --import
+call "%PY_CMD%" account_info.py import
 echo.
 pause
 goto :MAIN_MENU
@@ -140,7 +140,7 @@ goto :MAIN_MENU
 :PASTE_LOGIN
 echo.
 echo ========================================================================
-echo  手动粘贴授权重定向 URL 登录
+echo  手动粘贴授权重定向 URL 登录并加入多账号池
 echo ------------------------------------------------------------------------
 echo  [1] 智谱 BigModel 【国内】
 echo  [2] Z.AI 平台     【国外】
@@ -157,54 +157,56 @@ if "%popt%"=="2" (
     echo.
     zcode-proxy.exe auth login bigmodel --paste
 )
+call "%PY_CMD%" account_info.py sync_current_to_pool
 echo.
 pause
 goto :MAIN_MENU
 
 :CHECK_STATUS
 echo.
-if exist "account_info.py" (
-    call "%PY_CMD%" account_info.py detail
-) else (
-    zcode-proxy.exe auth status
-)
+call "%PY_CMD%" account_info.py detail
 echo.
 pause
 goto :MAIN_MENU
 
 :LOGOUT_ACCOUNT
 echo.
-echo ========================================================================
-echo  退出账号登录
-echo ========================================================================
-set "lopt=N"
-set /p lopt="确认要清除当前本地已保存的登录凭据吗？[Y/N，默认 N]: "
-set "lopt=%lopt: =%"
-if /i "%lopt%"=="Y" (
-    zcode-proxy.exe auth logout
-    echo [OK] 凭据已清理。
-) else (
-    echo [已取消]
-)
+call "%PY_CMD%" account_info.py manage
 echo.
 pause
 goto :MAIN_MENU
 
 :CLAIM_PACKAGES
 echo.
-echo ========================================================================
-echo  正在检测并领取体验套餐配额...
-echo ========================================================================
-echo.
-zcode-proxy.exe claim now
+call "%PY_CMD%" account_info.py claim
 echo.
 pause
 goto :MAIN_MENU
 
 :KILL_PORT
 echo.
-echo 正在清理旧的 zcode-proxy 进程...
-taskkill /f /im zcode-proxy.exe >nul 2>&1
-echo [OK] 清理完毕。
+call "%PY_CMD%" account_info.py kill-port
 ping 127.0.0.1 -n 2 >nul
+goto :MAIN_MENU
+
+:CHANGE_PASSWORD
+echo.
+call "%PY_CMD%" account_info.py passwd
+echo.
+pause
+goto :MAIN_MENU
+
+:SWITCH_ACCOUNT
+echo.
+call "%PY_CMD%" account_info.py switch
+echo.
+pause
+goto :MAIN_MENU
+
+:OPEN_ADMIN
+echo.
+echo 正在启动 Web 管理后台服务 (http://127.0.0.1:8081/admin)...
+start "ZCode Admin Web" /min "%PY_CMD%" "%~dp0main.py" serve --port 8081
+ping 127.0.0.1 -n 2 >nul
+start http://127.0.0.1:8081/admin/accounts
 goto :MAIN_MENU

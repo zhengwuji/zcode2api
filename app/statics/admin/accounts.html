@@ -6,6 +6,109 @@
   <title>zcode2api · 账号池</title>
   <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
   <link href="/static/css/app.css?v={{APP_VERSION}}" rel="stylesheet">
+  <style>
+    .quota-plans-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.45;
+      min-width: 420px;
+    }
+    .quota-plan-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .quota-plan-group + .quota-plan-group {
+      padding-top: 6px;
+      margin-top: 4px;
+      border-top: 1px dashed #cbd5e1;
+    }
+    .quota-plan-title-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11.5px;
+      color: #475569;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .quota-plan-title {
+      color: #334155;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .quota-plan-time {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: normal;
+      font-family: ui-monospace, monospace;
+    }
+    .quota-model-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      padding: 1px 0;
+      white-space: nowrap;
+    }
+    .q-dot {
+      color: #94a3b8;
+      font-weight: bold;
+    }
+    .q-name {
+      color: #0f172a;
+      font-weight: 600;
+      min-width: 105px;
+    }
+    .q-units {
+      font-weight: 700;
+      min-width: 80px;
+      color: #0f172a;
+    }
+    .q-units.is-full {
+      color: #16a34a;
+    }
+    .q-units.is-zero {
+      color: #ef4444;
+    }
+    .q-bar-wrap {
+      width: 65px;
+      height: 7px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .q-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+    .q-pct {
+      font-weight: 700;
+      min-width: 32px;
+      text-align: right;
+      font-size: 11.5px;
+    }
+    .q-note {
+      font-size: 11px;
+      color: #64748b;
+      margin-left: 2px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .q-note .is-exhausted, .q-note.is-exhausted {
+      color: #dc2626;
+      font-weight: 500;
+    }
+  </style>
 </head>
 <body>
 <div id="admin-header" data-active="/admin/accounts"></div>
@@ -68,10 +171,10 @@
   <div class="table-card">
     <table>
       <thead><tr>
-        <th>Token</th><th class="table-center" style="width:88px">提供商</th>
+        <th style="min-width:260px">账号标识 / 用户信息</th><th class="table-center" style="width:88px">提供商</th>
         <th class="table-center" style="width:72px">类型</th>
         <th class="table-center" style="width:80px">状态</th>
-        <th style="min-width:220px">额度</th>
+        <th style="min-width:440px">方案与额度详情 (多少M / 几亿 · 进度 · 到期时间)</th>
         <th class="table-center" style="width:60px">调用</th>
         <th class="table-center" style="width:60px">失败</th>
         <th style="width:120px">最近使用</th>
@@ -129,6 +232,18 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
             </span>
           </button>
+          <button type="button" class="oauth-provider-item" onclick="captureLiveZCode()" style="background:#f8fafc;border-color:#cbd5e1;border-left:3px solid #6366f1">
+            <span class="oauth-provider-name">在 ZCode 登录后保存当前账号（备用方式）</span>
+            <span class="oauth-provider-arrow">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </span>
+          </button>
+          <div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:#64748b">已在 Z-Accounts 中保存过账号？</span>
+            <a href="javascript:void(0)" onclick="importZAccounts()" style="font-size:12px;color:#4f46e5;font-weight:600;text-decoration:none">
+              一键导入 Z-Accounts 本地存档 →
+            </a>
+          </div>
         </div>
         <div id="login-active" style="display:none">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -354,14 +469,23 @@ function renderStats(s){
   set('s-active',s.active||0);
   set('s-exhausted',s.exhausted||0);
   let totalRem=0;
-  allAccounts.forEach(a=>{const q=a.quota||{};Object.values(q).forEach(w=>{totalRem+=Number(w.remaining)||0;});});
+  allAccounts.forEach(a=>{const q=a.quota||{};Object.values(q).forEach(w=>{const r=Number(w.remaining)||0; if(r>0) totalRem+=r;});});
   set('s-quota',fmt(totalRem));
 }
 
 function renderFilters(){
-  const counts={all:allAccounts.length,exhausted:0,disabled:0};
-  allAccounts.forEach(a=>{counts[a.status]=(counts[a.status]||0)+1;});
-  const chips=[['all','全部'],['exhausted','用完'],['disabled','禁用']];
+  const counts={all:allAccounts.length,jwt:0,apiKey:0,exhausted:0,disabled:0};
+  allAccounts.forEach(a=>{
+    counts[a.status]=(counts[a.status]||0)+1;
+    if(a.mode) counts[a.mode]=(counts[a.mode]||0)+1;
+  });
+  const chips=[
+    ['all','全部'],
+    ['jwt','套餐包号 (3亿活动包)'],
+    ['apiKey','APIKey 直连号'],
+    ['exhausted','用完'],
+    ['disabled','禁用']
+  ];
   document.getElementById('filter-bar').innerHTML=chips.map(([k,l])=>
     `<button class="filter-chip${curFilter===k?' active':''}" onclick="setFilter('${k}')">${l}<span class="filter-chip-count">${counts[k]||0}</span></button>`
   ).join('');
@@ -369,11 +493,96 @@ function renderFilters(){
 function setFilter(k){curFilter=k;renderFilters();renderTable();}
 
 function renderTable(){
-  const items=curFilter==='all'?allAccounts:allAccounts.filter(a=>a.status===curFilter);
+  let items=allAccounts;
+  if(curFilter==='jwt'||curFilter==='apiKey'){
+    items=allAccounts.filter(a=>a.mode===curFilter);
+  } else if(curFilter!=='all'){
+    items=allAccounts.filter(a=>a.status===curFilter);
+  }
   document.getElementById('tbl-count').textContent=items.length;
   const tb=document.getElementById('tbody');
   if(!items.length){tb.innerHTML='<tr><td colspan="9" class="empty-state">暂无账号，点击右上角「新增」添加</td></tr>';return;}
   tb.innerHTML=items.map(rowHtml).join('');
+}
+
+function maskPhone(p){
+  if(!p) return '';
+  p = String(p).trim();
+  if(p.length === 11) return p.slice(0,3) + '****' + p.slice(7);
+  return p;
+}
+
+function getPlanTag(a){
+  const p = a.plan || {};
+  const name = String(p.name || '').toLowerCase();
+  const pid = String(p.plan_id || '').toLowerCase();
+  if(pid.includes('start') || name.includes('start')) return 'Start';
+  if(name.includes('weekend') || pid.includes('wk')) return 'Weekend';
+  if(name.includes('coding') || pid.includes('coding')) return 'Coding';
+  if(name.includes('pro')) return 'Pro';
+  if(name.includes('lite')) return 'Lite';
+  if(name.includes('max')) return 'Max';
+  if(a.mode === 'apiKey') return 'API Key';
+  return 'Start';
+}
+
+function getPlanExpires(a){
+  const p = a.plan || {};
+  let exp = p.ends_at;
+  if(!exp && Array.isArray(p.balances) && p.balances.length){
+    exp = p.balances[0].expires_at || p.balances[0].period_end;
+  }
+  if(!exp && a.quota){
+    for(const q of Object.values(a.quota)){
+      if(q && q.expires_at){ exp = q.expires_at; break; }
+    }
+  }
+  if(exp){
+    try {
+      const d = new Date(exp * 1000);
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    } catch(e){}
+  }
+  return '';
+}
+
+function renderAccountCell(a){
+  // 优先展示真实邮箱；若无邮箱则优先展示手机号，方便用户一眼识别账号身份
+  let primary = a.email || '';
+  if(!primary && a.phone) primary = a.phone;
+  if(!primary) primary = a.display_name || a.name || a.token_masked;
+  
+  const initial = (primary[0] || (a.provider === 'bigmodel' ? 'B' : 'Z')).toUpperCase();
+  const planTag = getPlanTag(a);
+  const expStr = getPlanExpires(a);
+
+  const idents = [];
+  if(a.phone) idents.push(`手机: ${a.phone}`);
+  if(a.email && a.email !== primary) idents.push(`邮箱: ${a.email}`);
+  if(a.display_name && a.display_name !== primary && a.display_name !== a.email) idents.push(`昵称: ${a.display_name}`);
+  if(!idents.length && a.token_masked) idents.push(a.token_masked);
+  const fullMeta = idents.length ? idents.join(' · ') : '无额外绑定信息';
+
+  // 头像采用 Z-Accounts 经典暖色圆角方块设计
+  const avatarFallback = `<div style="width:40px;height:40px;border-radius:12px;background:#fbf7ee;border:1px solid #f3eccf;color:#78350f;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">${esc(initial)}</div>`;
+  const avatarImg = a.avatar
+    ? `<img src="${esc(a.avatar)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" style="width:40px;height:40px;border-radius:12px;object-fit:cover;border:1px solid #e2e8f0;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.03)" alt="avatar" /><div style="display:none;width:40px;height:40px;border-radius:12px;background:#fbf7ee;border:1px solid #f3eccf;color:#78350f;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">${esc(initial)}</div>`
+    : avatarFallback;
+
+  return `
+    <div style="display:flex;align-items:center;gap:12px;min-width:320px">
+      ${avatarImg}
+      <div style="min-width:0;flex:1">
+        <div style="display:flex;align-items:center;gap:7px">
+          <span style="font-size:14.5px;font-weight:600;color:#0f172a;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(primary)}">${esc(primary)}</span>
+          <span style="display:inline-block;font-size:10.5px;font-weight:550;line-height:17px;padding:0 6px;border-radius:5px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569">${esc(planTag)}</span>
+        </div>
+        <div style="font-size:12px;line-height:1.4;color:#4338ca;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(fullMeta)}">
+          ${esc(fullMeta)}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function rowHtml(a){
@@ -382,7 +591,7 @@ function rowHtml(a){
   const isDisabled=a.status==='disabled';
   const loading=refreshing.has(a.id);
   return `<tr>
-    <td><span class="tok">${esc(a.token_masked)}</span><div style="font-size:11px;color:#aaa;margin-top:2px">${esc(a.name)}</div></td>
+    <td>${renderAccountCell(a)}</td>
     <td class="table-center">${a.provider === 'bigmodel' ? '<span class="badge" style="background:#f5f3ff;color:#6d28d9">BigModel (国内)</span>' : '<span class="badge" style="background:#f0fdf4;color:#15803d">z.ai (国际)</span>'}</td>
     <td class="table-center"><span class="badge badge-${a.mode}">${isJwt?'JWT':'Key'}</span></td>
     <td class="table-center"><span class="badge badge-${a.status}">${STATUS_LABEL[a.status]||a.status}</span></td>
@@ -402,53 +611,232 @@ function rowHtml(a){
   </tr>`;
 }
 
+function formatUnits(units){
+  if(units===null||units===undefined) return '未知';
+  units=Number(units)||0;
+  if(units<=0) return '0';
+  if(units>=100000000){
+    const val=(units/100000000).toFixed(1);
+    return val.endsWith('.0') ? val.slice(0,-2)+'亿' : val+'亿';
+  }
+  if(units>=1000000){
+    const val=(units/1000000).toFixed(1);
+    return val+'M';
+  }
+  if(units>=1000){
+    const val=(units/1000).toFixed(1);
+    return val+'K';
+  }
+  return String(units);
+}
+
+function formatTime(ts){
+  if(!ts) return '长期有效';
+  try{
+    const d=new Date(Number(ts)>1e11 ? Number(ts) : Number(ts)*1000);
+    if(isNaN(d.getTime())) return String(ts);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }catch(e){ return String(ts); }
+}
+
 function quotaCell(a){
-  const q=a.quota||{};
-  const keys=Object.keys(q);
-  if(keys.length){
-    return '<div class="quota-rows">'+keys.map(k=>{
-      const w=q[k]||{};const rem=Number(w.remaining)||0,tot=Number(w.total)||0;
-      const pct=tot>0?Math.max(0,Math.min(100,Math.round(rem/tot*100))):0;
-      const color=rem<=0?'#c9c9cf':(pct<15?'#b0632a':'#4c9168');
-      return `<div class="quota-row">
-        <span class="quota-row-name">${esc(shortModel(k))}</span>
-        <span class="quota-row-track"><span class="quota-row-fill" style="width:${pct}%;background:${color}"></span></span>
-        <span class="quota-row-val">${fmt(rem)} / ${fmt(tot)}</span>
-      </div>`;
-    }).join('')+'</div>';
+  // 1. APIKey 直连模式
+  if(a.mode==='apiKey' || (a.quota && a.quota['APIKey直连'])){
+    return `
+      <div class="quota-plans-card" style="border-left:3px solid #3b82f6">
+        <div class="quota-plan-title-bar">
+          <span class="quota-plan-title"><span style="color:#2563eb">●</span> 开发者 API Key 直连</span>
+          <span class="quota-plan-time">有效时间：长期有效</span>
+        </div>
+        <div class="quota-model-item">
+          <span class="q-dot">•</span>
+          <span class="q-name">全模型直连</span>
+          <span class="q-units is-full" style="min-width:auto">按需计费 (无包上限)</span>
+          <div class="q-bar-wrap"><div class="q-bar-fill" style="width:100%;background:#3b82f6"></div></div>
+          <span class="q-pct" style="color:#2563eb">100%</span>
+          <span class="q-note" style="color:#2563eb">(官方 PaaS 直连畅通)</span>
+        </div>
+      </div>
+    `;
   }
 
-  // 没有额度时：详细列出原因并给出指引操作
-  const isJwt=a.mode==='jwt';
-  const err=a.last_error||'';
-  if(a.mode==='apiKey'){
-    return `<div class="quota-reason-box is-info" title="API Key 模式可直接转发调用，无官方额度明细接口"><span class="quota-reason-text">Key 模式（可直接调用）</span></div>`;
+  const all_plans = (a.plan && a.plan.all_plans) ? a.plan.all_plans : (a.plan && (a.plan.name || a.plan.plan_id) ? [a.plan] : []);
+  const balances = (a.plan && a.plan.balances) ? a.plan.balances : [];
+
+  // 2. 有详细方案与余额记录（如 Weekend Build、Start Plan 多方案）
+  if(all_plans.length && balances.length){
+    const balMap = {};
+    balances.forEach(b => {
+      const u_pid = b.user_plan_id || '';
+      const ent_id = b.entitlement_id || '';
+      const sname = b.show_name || b.meter || '';
+      if(u_pid && ent_id) balMap[u_pid + '::' + ent_id] = b;
+      if(u_pid && sname) balMap[u_pid + '::' + sname] = b;
+    });
+
+    const planGroups = all_plans.map((p, pidx) => {
+      const u_pid = p.user_plan_id || '';
+      const p_name = p.name || p.plan_id || `方案 ${pidx+1}`;
+      const p_desc = p.description ? ` (${p.description})` : '';
+      let p_exp = p.ends_at;
+      const sub_bals = balances.filter(b => b.user_plan_id === u_pid);
+      if(sub_bals.length && sub_bals[0].expires_at){
+        p_exp = sub_bals[0].expires_at;
+      }
+      const p_exp_str = p_exp ? `至 ${formatTime(p_exp)}` : '长期有效';
+
+      const modelItems = (p.entitlements || []).map(ent => {
+        const m_name = ent.show_name || ent.meter || '模型';
+        const ent_id = ent.entitlement_id || '';
+        const b = balMap[u_pid + '::' + ent_id] || balMap[u_pid + '::' + m_name] || sub_bals.find(x => x.show_name === m_name || x.entitlement_id === ent_id);
+
+        if(b && b.total_units){
+          const rem = Number(b.remaining_units) || 0;
+          const tot = Number(b.total_units) || 0;
+          const used = Number(b.used_units) || 0;
+          const pct = tot > 0 ? Math.min(100, Math.max(0, Math.round(rem / tot * 100))) : 0;
+          const rem_str = `${formatUnits(rem)}/${formatUnits(tot)}`;
+          const barColor = rem <= 0 ? '#cbd5e1' : (pct < 15 ? '#f97316' : '#10b981');
+          const pctColor = rem <= 0 ? '#94a3b8' : (pct < 15 ? '#ea580c' : '#16a34a');
+          const unitClass = rem <= 0 ? 'is-zero' : (pct >= 90 ? 'is-full' : '');
+          const noteStr = rem > 0 ? `(已消耗: ${formatUnits(used)})` : `<span class="is-exhausted">(当前周期额度已耗尽)</span>`;
+
+          return `
+            <div class="quota-model-item">
+              <span class="q-dot">•</span>
+              <span class="q-name">${esc(m_name)}</span>
+              <span class="q-units ${unitClass}">${esc(rem_str)}</span>
+              <div class="q-bar-wrap"><div class="q-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+              <span class="q-pct" style="color:${pctColor}">${pct}%</span>
+              <span class="q-note">${noteStr}</span>
+            </div>
+          `;
+        } else {
+          const grant = ent.grant_units || 0;
+          return `
+            <div class="quota-model-item">
+              <span class="q-dot">•</span>
+              <span class="q-name">${esc(m_name)}</span>
+              <span class="q-units is-full">${formatUnits(grant)}</span>
+              <span class="q-note" style="color:#64748b">(已获套餐配额)</span>
+            </div>
+          `;
+        }
+      }).join('');
+
+      return `
+        <div class="quota-plan-group">
+          <div class="quota-plan-title-bar">
+            <span class="quota-plan-title">[方案 ${pidx+1}] ${esc(p_name)}${esc(p_desc)}</span>
+            <span class="quota-plan-time">有效时间：${esc(p_exp_str)}</span>
+          </div>
+          <div class="quota-model-list">
+            ${modelItems}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `<div class="quota-plans-card">${planGroups}</div>`;
   }
-  if(err.includes('未开通') || err.includes('未领取') || !a.plan || !Object.keys(a.plan).length){
-    return `<div class="quota-reason-box is-warn" title="${esc(err||'未激活套餐')}">
-      <span class="quota-reason-text">${esc(err||'未开通方案（未领套餐）')}</span>
-      ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">去领取</span>`:''}
-    </div>`;
+
+  // 3. 若只有 a.quota map
+  const q = a.quota || {};
+  const keys = Object.keys(q);
+  if(keys.length){
+    let expStr = getPlanExpires(a);
+    const modelItems = keys.map(m_name => {
+      const w = q[m_name] || {};
+      const rem = Number(w.remaining);
+      const tot = Number(w.total);
+      const used = Number(w.used) || 0;
+
+      if(rem === -1 || w.status === '可用' || m_name === 'APIKey直连'){
+        return `
+          <div class="quota-model-item">
+            <span class="q-dot">•</span>
+            <span class="q-name">${esc(shortModel(m_name))}</span>
+            <span class="q-units is-full">全模型直连可用</span>
+            <div class="q-bar-wrap"><div class="q-bar-fill" style="width:100%;background:#3b82f6"></div></div>
+            <span class="q-pct" style="color:#2563eb">100%</span>
+            <span class="q-note" style="color:#2563eb">(按需计费)</span>
+          </div>
+        `;
+      }
+      if(rem !== undefined && tot !== undefined){
+        const pct = tot > 0 ? Math.min(100, Math.max(0, Math.round(rem / tot * 100))) : 0;
+        const rem_str = `${formatUnits(rem)}/${formatUnits(tot)}`;
+        const barColor = rem <= 0 ? '#cbd5e1' : (pct < 15 ? '#f97316' : '#10b981');
+        const pctColor = rem <= 0 ? '#94a3b8' : (pct < 15 ? '#ea580c' : '#16a34a');
+        const unitClass = rem <= 0 ? 'is-zero' : (pct >= 90 ? 'is-full' : '');
+        const noteStr = rem > 0 ? `(已消耗: ${formatUnits(used)})` : `<span class="is-exhausted">(当前周期额度已耗尽)</span>`;
+        if(!expStr && w.expires_at) expStr = formatTime(w.expires_at);
+
+        return `
+          <div class="quota-model-item">
+            <span class="q-dot">•</span>
+            <span class="q-name">${esc(shortModel(m_name))}</span>
+            <span class="q-units ${unitClass}">${esc(rem_str)}</span>
+            <div class="q-bar-wrap"><div class="q-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+            <span class="q-pct" style="color:${pctColor}">${pct}%</span>
+            <span class="q-note">${noteStr}</span>
+          </div>
+        `;
+      }
+      return '';
+    }).join('');
+
+    const timeStr = expStr ? `有效时间：至 ${expStr}` : '有效时间：当期有效';
+    return `
+      <div class="quota-plans-card">
+        <div class="quota-plan-group">
+          <div class="quota-plan-title-bar">
+            <span class="quota-plan-title">套餐方案配额明细</span>
+            <span class="quota-plan-time">${esc(timeStr)}</span>
+          </div>
+          <div class="quota-model-list">
+            ${modelItems}
+          </div>
+        </div>
+      </div>
+    `;
   }
-  if(err.includes('失效') || err.includes('401') || err.includes('403')){
-    return `<div class="quota-reason-box" title="${esc(err)}"><span class="quota-reason-text">${esc(err)}</span></div>`;
+
+  // 4. 额度耗尽或异常情况
+  const isJwt = a.mode === 'jwt';
+  const err = a.last_error || '';
+  if(a.status === 'exhausted' || err.includes('用完') || err.includes('0 剩余')){
+    return `
+      <div class="quota-plans-card" style="border-left:3px solid #ef4444">
+        <div class="quota-plan-title-bar">
+          <span class="quota-plan-title" style="color:#ef4444">当前周期额度已耗尽 (0 剩余)</span>
+          <span class="quota-plan-time">今晚 24:00 重置恢复</span>
+        </div>
+        <div class="quota-model-item" style="color:#64748b;font-size:11.5px">
+          ${isJwt ? `<span class="quota-action-link" onclick="openClaimModal('${a.id}')">刷新资格/领取新套餐</span>` : ''}
+        </div>
+      </div>
+    `;
   }
-  if(err.includes('用完') || err.includes('0 剩余') || a.status==='exhausted'){
-    return `<div class="quota-reason-box is-muted" title="${esc(err||'额度已用完')}">
-      <span class="quota-reason-text">额度已用完 (0 剩余)</span>
-      ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">刷新资格</span>`:''}
-    </div>`;
+  if(a.status === 'cooling'){
+    return `
+      <div class="quota-plans-card" style="border-left:3px solid #f59e0b">
+        <div class="quota-plan-title-bar">
+          <span class="quota-plan-title" style="color:#d97706">被限流保护中</span>
+          <span class="quota-plan-time">系统已自动切换备用账号</span>
+        </div>
+      </div>
+    `;
   }
-  if(err){
-    return `<div class="quota-reason-box is-muted" title="${esc(err)}">
-      <span class="quota-reason-text">${esc(err)}</span>
-      ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">查资格</span>`:''}
-    </div>`;
-  }
-  return `<div class="quota-reason-box is-muted" title="未获取到额度数据">
-    <span class="quota-reason-text">未获取到额度</span>
-    ${isJwt?`<span class="quota-action-link" onclick="openClaimModal('${a.id}')">查资格</span>`:''}
-  </div>`;
+
+  return `
+    <div class="quota-plans-card" style="border-left:3px solid #cbd5e1">
+      <div class="quota-plan-title-bar">
+        <span class="quota-plan-title" style="color:#64748b">${esc(err || '未获取到套餐额度')}</span>
+        ${isJwt ? `<span class="quota-action-link" onclick="openClaimModal('${a.id}')">刷新资格</span>` : ''}
+      </div>
+    </div>
+  `;
 }
 function shortModel(n){return String(n).replace(/^GLM[- _]?/i,'').slice(0,12)||n;}
 
@@ -680,6 +1068,38 @@ function cancelLogin(){stopLoginPoll();closeModal('modal-add');}
 function copyLoginUrl(){navigator.clipboard.writeText(_loginUrl).then(()=>showToast('已复制','success')).catch(()=>showToast('复制失败','error'));}
 function openLoginUrl(){if(_loginUrl)window.open(_loginUrl,'_blank','noopener');}
 
+async function captureLiveZCode(){
+  showToast('正在从本地 ZCode (credentials.json) 捕获当前账号…', 'info');
+  try{
+    const d = await api('POST', '/accounts/capture-zcode');
+    if(d.ok){
+      showToast('🎉 ' + d.message, 'success');
+      closeModal('modal-add');
+      await load();
+    }else{
+      showToast('保存失败: ' + (d.message||'未知错误'), 'error');
+    }
+  }catch(e){
+    showToast('保存失败: ' + e.message, 'error');
+  }
+}
+
+async function importZAccounts(){
+  showToast('正在扫描并导入 Z-Accounts 本地历史存档…', 'info');
+  try{
+    const d = await api('POST', '/accounts/import-zaccounts');
+    if(d.ok){
+      showToast('🎉 ' + d.message, 'success');
+      closeModal('modal-add');
+      await load();
+    }else{
+      showToast('导入失败: ' + (d.message||'未发现存档'), 'warn');
+    }
+  }catch(e){
+    showToast('导入失败: ' + e.message, 'error');
+  }
+}
+
 function openEdit(id){
   const a=allAccounts.find(x=>x.id===id);if(!a)return;
   _editId=id;
@@ -743,7 +1163,7 @@ async function onImportFile(ev){
 
 /* ── Helpers ── */
 function set(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
-function fmt(n){n=Number(n)||0;if(n>=1000000)return (n/1000000).toFixed(n%1000000===0?0:1)+'M';if(n>=10000)return (n/1000).toFixed(1)+'k';return n;}
+function fmt(n){return formatUnits(n);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtDate(d){if(!d)return'—';const dt=new Date(d*1000);return isNaN(dt)?'—':dt.toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}
 function openModal(id){document.getElementById(id).classList.add('open');}

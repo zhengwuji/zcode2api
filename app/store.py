@@ -108,6 +108,149 @@ class Store:
                     self._persist_account(account)
                 if account.provider in self._accounts:
                     self._accounts[account.provider].append(account)
+            self._enrich_identities()
+            self.deduplicate()
+
+    def _enrich_identities(self) -> None:
+        """自动从 JWT 荷载及本地 Z-Accounts 镜像中提取识别真实的邮箱、手机号、昵称与头像。"""
+        try:
+            import os
+            import re
+            import base64
+            from pathlib import Path
+            from .zcode_importer import decrypt_zcode_string, derive_zcode_fallback_key
+
+            home = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~"))
+            key = derive_zcode_fallback_key()
+            id_map: dict[str, dict] = {}
+
+            # 扫描 ~/.zcode-switch/accounts/*.json 提取真实账户信息
+            switch_dir = home / ".zcode-switch" / "accounts"
+            if switch_dir.exists():
+                for f in switch_dir.glob("*.json"):
+                    try:
+                        d = json.loads(f.read_text(encoding="utf-8"))
+                        txt = f.read_text(encoding="utf-8", errors="ignore")
+                        phones = re.findall(r"1[3-9]\d{9}", txt)
+                        phone = phones[0] if phones else ""
+                        creds = d.get("credentials") or {}
+                        for k, v in creds.items():
+                            if "user_info" in k:
+                                dec = decrypt_zcode_string(v, key)
+                                if dec and dec.startswith("{"):
+                                    ui = json.loads(dec)
+                                    uid = ui.get("user_id") or ui.get("id")
+                                    if uid:
+                                        if phone and not ui.get("phone"):
+                                            ui["phone"] = phone
+                                        id_map[str(uid)] = ui
+                        bm_at = creds.get("oauth:bigmodel:access_token")
+                        if bm_at:
+                            plain_at = decrypt_zcode_string(bm_at, key)
+                            if plain_at:
+                                try:
+                                    import httpx
+                                    r = httpx.get("https://bigmodel.cn/api/biz/customer/getCustomerInfo", headers={"Authorization": plain_at}, timeout=3)
+                                    if r.status_code == 200:
+                                        c_data = r.json().get("data") or {}
+                                        c_num = str(c_data.get("customerNumber") or "")
+                                        if c_num and c_num in id_map:
+                                            nick = c_data.get("nickName") or ""
+                                            c_name = c_data.get("customerName") or ""
+                                            id_map[c_num]["displayName"] = f"{nick} ({c_name})".strip() if nick else c_name
+                                            if c_data.get("avatar"):
+                                                id_map[c_num]["avatarUrl"] = c_data["avatar"]
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+
+            def _b64url(s: str) -> bytes:
+                s += "=" * ((4 - len(s) % 4) % 4)
+                return base64.urlsafe_b64decode(s)
+
+            for p in PROVIDERS:
+                for a in self._accounts[p]:
+                    changed = False
+                    uid = a.user_id or ""
+                    # 1. 尝试从 JWT 提取 user_id / sub / email / phone
+                    if a.jwt_token and a.jwt_token.count(".") == 2:
+                        try:
+                            payload = json.loads(_b64url(a.jwt_token.split(".")[1]).decode("utf-8", "ignore"))
+                            if not uid:
+                                uid = str(payload.get("user_id") or payload.get("sub") or "")
+                            if not a.email and payload.get("email"):
+                                a.email = str(payload["email"])
+                                changed = True
+                            if not a.phone and payload.get("phone"):
+                                a.phone = str(payload["phone"])
+                                changed = True
+                        except Exception:
+                            pass
+
+                    # 2. 从映射表匹配
+                    if not uid:
+                        for k in id_map:
+                            if k[:8] in a.id or k[:8] in a.name:
+                                uid = k
+                                break
+
+                    if uid:
+                        if not a.user_id:
+                            a.user_id = uid
+                            changed = True
+                        info = id_map.get(uid, {})
+                        if not a.email and info.get("email"):
+                            a.email = str(info["email"])
+                            changed = True
+                        if not a.phone and info.get("phone"):
+                            a.phone = str(info["phone"])
+                            changed = True
+                        if not a.avatar and (info.get("avatar") or info.get("avatarUrl")):
+                            a.avatar = str(info.get("avatar") or info.get("avatarUrl"))
+                            changed = True
+                        if info.get("displayName") and a.display_name != info.get("displayName"):
+                            a.display_name = str(info["displayName"])
+                            changed = True
+                        elif not a.display_name and (info.get("name") or info.get("username")):
+                            a.display_name = str(info.get("name") or info.get("username"))
+                            changed = True
+
+                    # 3. 兜底解析 name
+                    if not a.email and "@" in a.name:
+                        a.email = a.name
+                        changed = True
+
+                    if changed:
+                        self._persist_account(a)
+        except Exception:
+            pass
+
+    def deduplicate(self) -> int:
+        """根据 (provider, user_id/identity, mode) 自动识别并合并同一账号的重复凭据（保留最新有效的一份）。"""
+        with self._lock:
+            removed_count = 0
+            for p in PROVIDERS:
+                seen: dict[tuple[str, str], Account] = {}
+                to_remove: list[str] = []
+                for a in list(self._accounts[p]):
+                    uid = a.user_id or a.email or a.phone or a.name or a.id
+                    key = (uid, a.mode)
+                    if key in seen:
+                        prev = seen[key]
+                        if (a.created_at or 0) >= (prev.created_at or 0):
+                            to_remove.append(prev.id)
+                            seen[key] = a
+                        else:
+                            to_remove.append(a.id)
+                    else:
+                        seen[key] = a
+
+                for rid in to_remove:
+                    self._delete_account(rid)
+                    self._accounts[p] = [a for a in self._accounts[p] if a.id != rid]
+                    removed_count += 1
+            return removed_count
 
     def _persist_account(self, account: Account) -> None:
         with closing(self._connect()) as conn:
@@ -146,6 +289,14 @@ class Store:
     # ── 设置 ─────────────────────────────────────────────────────────────────
     def get_setting(self, key: str, default=None):
         with self._lock:
+            try:
+                with closing(self._connect()) as conn:
+                    row = conn.execute(f"SELECT value FROM {_META} WHERE key = ?", (key,)).fetchone()
+                    if row is not None:
+                        self._settings[key] = row["value"]
+                        return row["value"]
+            except Exception:
+                pass
             return self._settings.get(key, default)
 
     def set_setting(self, key: str, value) -> None:
@@ -257,8 +408,9 @@ class Store:
             return True
 
     # ── 轮询选择 ─────────────────────────────────────────────────────────────
-    def select(self, provider: str, skip_ids: set[str] | None = None) -> Account | None:
-        """按可用额度与轮询选择下一个可用账号。有可用额度的优先，用完/失效的自动跳过。"""
+    # ── 轮询选择 ─────────────────────────────────────────────────────────────
+    def select(self, provider: str, skip_ids: set[str] | None = None, model: str = "") -> Account | None:
+        """按可用额度与轮询选择下一个可用账号。有可用额度的优先，用完/失效/冷却的自动跳过。"""
         skip_ids = skip_ids or set()
         now = time.time()
         with self._lock:
@@ -270,12 +422,28 @@ class Store:
                 return None
 
             def _remaining_tokens(acc: Account) -> int:
-                total = 0
-                if acc.quota and isinstance(acc.quota, dict):
-                    for v in acc.quota.values():
-                        if isinstance(v, dict):
-                            total += int(v.get("remaining", 0) or 0)
-                return total
+                if acc.mode == "apiKey":
+                    return 999_999_999_999
+                q = acc.quota or {}
+                if not isinstance(q, dict) or not q:
+                    return 0
+                if model:
+                    norm_m = model.upper()
+                    for k, v in q.items():
+                        if isinstance(v, dict) and (k.upper() == norm_m or norm_m in k.upper()):
+                            rem = v.get("remaining")
+                            if rem == -1:
+                                return 999_999_999_999
+                            return int(rem or 0)
+                tot = 0
+                for v in q.values():
+                    if isinstance(v, dict):
+                        rem = v.get("remaining")
+                        if rem == -1:
+                            return 999_999_999_999
+                        if rem and int(rem) > 0:
+                            tot += int(rem)
+                return tot
 
             # 优先选择有剩余额度的账号
             has_quota = [a for a in pool if _remaining_tokens(a) > 0]

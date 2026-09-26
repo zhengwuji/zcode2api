@@ -39,6 +39,20 @@
       <div class="hint">后台自动刷新各账号额度与状态的周期。设为 0 关闭自动刷新（仍可手动刷新）。修改后即时生效。</div>
       <input class="input" id="quota-interval" type="number" min="0" step="5" placeholder="60">
     </div>
+    <div class="settings-row">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="auto-switch" style="width:16px;height:16px;cursor:pointer">
+        <span style="font-weight:600">失败自动切换账号（故障转移容灾）</span>
+      </label>
+      <div class="hint">开启后，当调用账号遇到额度耗尽、限流 429、鉴权失败、5xx 错误或接口报错时，在同一次请求中无感自动转移至下一个可用账号继续处理，调用不中断。</div>
+    </div>
+    <div class="settings-row">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="auto-claim" style="width:16px;height:16px;cursor:pointer">
+        <span style="font-weight:600">自动检测并领取体验套餐配额</span>
+      </label>
+      <div class="hint">开启后，系统在定时监控或检测到额度耗尽时自动探测并领取官方免费体验套餐包。</div>
+    </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
       <button onclick="saveSettings()" class="dialog-btn dialog-btn-primary">保存设置</button>
     </div>
@@ -72,6 +86,8 @@ async function load(){
     document.getElementById('admin-key').value=d.admin_key||'';
     document.getElementById('gateway-key').value=d.gateway_key||'';
     document.getElementById('quota-interval').value=d.quota_refresh_interval??60;
+    document.getElementById('auto-switch').checked=d.auto_switch??true;
+    document.getElementById('auto-claim').checked=d.auto_claim??true;
   }catch(e){showToast('加载失败: '+e.message,'error');}
 }
 
@@ -106,11 +122,13 @@ async function saveSettings(){
   const admin_key=document.getElementById('admin-key').value.trim();
   const gateway_key=document.getElementById('gateway-key').value.trim();
   const quota_refresh_interval=parseInt(document.getElementById('quota-interval').value,10);
+  const auto_switch=document.getElementById('auto-switch').checked;
+  const auto_claim=document.getElementById('auto-claim').checked;
   if(!admin_key)return showToast('后台密码不能为空','error');
   if(!gateway_key)return showToast('网关 API Key 不能为空','error');
   if(isNaN(quota_refresh_interval)||quota_refresh_interval<0)return showToast('刷新间隔必须是非负整数','error');
   try{
-    await api('PUT','/settings',{admin_key,gateway_key,quota_refresh_interval});
+    await api('PUT','/settings',{admin_key,gateway_key,quota_refresh_interval,auto_switch,auto_claim});
     await adminKey.set(admin_key);   // 同步本地保存，避免改密后被登出
     showToast('已保存','success');
   }catch(e){showToast('保存失败: '+e.message,'error');}

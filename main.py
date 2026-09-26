@@ -239,12 +239,25 @@ def cmd_export(args: list[str]) -> None:
 
 def cmd_import(args: list[str]) -> None:
     if not args:
-        print(c("格式: python cli.py import <file>", "red"))
+        print(c("格式: python main.py import <file>", "red"))
         return
     with open(args[0], encoding="utf-8") as f:
         payload = json.load(f)
     count = store.import_accounts(payload)
     print(c(f"✔ 已导入 {count} 个账号", "green"))
+
+
+def cmd_import_zcode(args: list[str]) -> None:
+    from app.zcode_importer import capture_and_import_live, import_all_from_local
+    if "--all" in args:
+        count, names = import_all_from_local(store)
+        print(c(f"✔ 成功扫描并导入 {count} 个本地 ZCode/Z-Accounts 账号: {', '.join(names)}", "green"))
+    else:
+        ok, msg, acc = capture_and_import_live(store)
+        if ok and acc:
+            print(c(f"✔ {msg}", "green"))
+        else:
+            print(c(f"✖ {msg}", "red"))
 
 
 # ── 分发 ─────────────────────────────────────────────────────────────────────
@@ -277,6 +290,8 @@ def main() -> None:
         cmd_export(rest)
     elif cmd == "import":
         cmd_import(rest)
+    elif cmd == "import-zcode":
+        cmd_import_zcode(rest)
     else:
         print(c(f"未知命令: {cmd}", "red"))
         usage()

@@ -12,7 +12,7 @@
 
 将 ZCode (zcode.z.ai) Coding Plan 与智谱开放平台 (BigModel) 凭证无缝转化为标准的 **OpenAI** 与 **Anthropic** 兼容 API，支持多账号智能负载均衡、额度耗尽自动切号、套餐资格检测与自动抢领、实时用量监控与无浏览器无痕验证码自动续期。
 
-[功能亮点](#-核心功能亮点) • [快速开始](#-快速开始) • [客户端配置指南](#-客户端配置指南) • [Docker 部署](#-docker-部署) • [模型支持](#-支持的模型列表) • [安全与防封建议](#-安全与防封建议)
+[功能亮点](#-核心功能亮点) • [快速开始](#-快速开始) • [客户端配置指南](#-客户端配置指南) • [Docker 部署](#-docker-部署) • [模型支持](#-支持的模型列表) • [安全与防封建议](#-安全与防封建议) • [更新日志](#-更新日志-changelog)
 
 </div>
 
@@ -23,16 +23,23 @@
 * 🌐 **全协议反代网关（OpenAI + Anthropic 双兼容）**：
   * **OpenAI 兼容端点**：`/v1/chat/completions` 与 `/v1/models`，完美适配市面上 99% 的 AI 工具（Cherry Studio、NextChat、Cursor、One-API、New API、Chatbox、LobeChat 等）。
   * **Anthropic 兼容端点**：`/v1/messages`，原生支持 Claude 客户端、Cline、Roo Code 及 Claude Code。
-* 🔀 **多账号智能轮询与无感自动切号 (`auto_switch`)**：
-  * 多个账号通过 Round-Robin 算法自动负载均衡。
-  * **额度优先调度 (Active Quota Priority)**：智能感知账号池各账号实时配额，优先调度有充足可用额度的健康账号，自动后置耗尽账号。
+* 🔀 **模型感知智能轮询与同次请求无感切号 (`auto_switch`)**：
+  * **模型级配额感知调度 (Model-Aware Scheduling)**：网关精确感知各账号对**当前请求模型**的实际剩余配额。例如账号 A 的 `GLM-5.3` 已耗尽但 `GLM-5.3-Flash` 充裕时，当客户端请求 `GLM-5.3` 将自动绕开 A 调度有额度的账号 B，而请求 Flash 时仍可充分利用 A。
+  * **额度优先调度 (Active Quota Priority)**：智能优先调度配额充足的健康账号，自动后置濒临耗尽的账号。
   * **跨平台故障转移 (Cross-Provider Failover)**：遇到账号额度耗尽（HTTP 402/balance exhaust）、上游限流（429）或凭证失效时，在**同一次请求中自动无感转移**至下一个可用账号，并支持 Z.AI 与 智谱 BigModel 跨渠道自动容灾，调用绝不中断。
+* 📊 **多方案配额与几亿/多少M可视化看板 (Multi-Plan Quota Visualization)**：
+  * **智能单位换算**：额度达到或超过 1 亿自动显示为 **「几亿」**（如 `3亿/3亿`、`2.95亿`、总额度 `11.9亿`，不再是生硬的 `300M` 或 `1190M`）；百万级显示为 **「多少M」**（如 `0/3.0M`、`0/5.0M`、`已消耗: 4.7M`）；千级显示为 **「K」**。
+  * **多方案卡片分组**：完整呈现单个账号下的全部套餐方案（如 `[方案 1] ZCode Weekend Build`、`[方案 2] ZCode Start Plan` 等），配有模型配额进度条、到期时间（精确至分）及耗尽高亮状态。
+  * **清晰账号标识**：明确标注手机号、昵称、脱敏 User ID 或 Token 前缀，一眼认清账号。
+* 👥 **多凭据智能去重与自动合并 (Smart Account Merging)**：
+  * 彻底解决同一账号因不同终端登录、不同时期获取产生的多个凭证导致账号池膨胀重复的问题。
+  * 自动基于手机号、User ID 深度合并，将多套方案与额度统一归集在同一账号卡片下。
+* 📦 **ZCode & Z-Accounts 本地凭证一键导入与深度互通**：
+  * 内置 `app/zcode_importer.py`，一键解密导入本地 `~/.zcode/v2/credentials.json` 及 `~/.zcode-switch/accounts/*.json` 存档。
+  * 自动补齐 `~/.zcode/v2/config.json` 与 `~/.zcode-proxy/credentials.json`，解决原版 proxy 启动报错与凭证不同步问题。
 * 🎁 **套餐资格刷新与自动领取 (`auto_claim`)**：
   * 深度参考 Z-Accounts 核心原理，提供 **「刷新资格」** 接口，一键并发探测账号池中所有账号在官方当前可领取的体验套餐包（如 Start Plan 3M/5M 配额）。
   * 开启 **「自动领取」** 后，后台监控或新账号入池时会自动求解人机验证并抢领免费方案，彻底告别手动续期。
-* 📊 **实时用量监控与精确原因诊断**：
-  * 可视化图表展示每个账号各模型的总额度、已消耗、剩余额度与重置周期。
-  * **彻底告别含糊不清的“未获取”**：账号无额度时会精确诊断并展示原因（如 *未开通方案（新号/未领取）*、*Token 失效 401/403*、*额度耗尽 0 剩余*、*官方限流 429* 等），并直接附带快捷领取/检测入口。
 * 🖼️ **多模态视觉 (Vision) 完整兼容**：
   * 原生支持 `GLM-5.3` / `GLM-5.3-Flash` 视觉识图，客户端上传或粘贴的截图（Base64 `image_url`）会自动转译为上游规范，直接识图写代码、排查报错截图。
 * 🛡️ **轻量级纯内存无痕验证求解器**：
@@ -42,7 +49,7 @@
   * 后台「API 反代接入说明」弹窗与「设置」页面均提供 **【一键复制】**、**【自定义修改保存】** 与 **【随机重新生成】** 按钮，随时调整，即时持久化生效。
 * 🖥️ **Windows 双模式极速运行支持**：
   * **模式 A（Web 多账号网关集群）**：运行 `start.bat`，启动完整 FastAPI 集群后端，提供可视化 Web 管理界面与多账号轮询调度（默认端口 `3335`）。
-  * **模式 B（单账号交互控制台）**：运行 `start_proxy.bat`，启动基于 `zcode-proxy` 的轻量交互控制台（端口 `8080`），支持 OAuth 一键登录、粘贴 URL、额度详细看板与套餐领取。
+  * **模式 B（单账号交互控制台）**：运行 `start_proxy.bat`，启动基于 `zcode-proxy` 的轻量交互控制台（端口 `8080`），集成快捷键 `[A]` 直达 Web 管理后台、`[M]` 密码密钥管理、`[S]` 账号切换、`[P]` 原生调试模式。
 * ⚡ **极速开箱与防端口冲突**：
   * Windows 内置 `start.bat` / `start.ps1` 与 `stop.bat` / `stop.ps1`，自动检测端口占用并智能递增顺延，双击即可直接运行。
 
@@ -204,12 +211,13 @@ docker run -d --name zcode2api \
 │   ├── main.py            # FastAPI 应用入口与生命周期管理
 │   ├── settings.py        # 环境变量与默认配置
 │   ├── models.py          # Account 实体、数据状态与 Public View
-│   ├── store.py           # SQLite 持久化、轮询游标与设置存储
+│   ├── store.py           # SQLite 持久化、轮询游标、账号去重与设置存储
 │   ├── agent.py           # 官方上游请求头组装（指纹、MID、版本仿真）
 │   ├── claim.py           # 套餐资格查询（preview）与自动抢领（claim）
 │   ├── captcha.py         # 阿里云无痕验证码管理器
+│   ├── zcode_importer.py  # ZCode & Z-Accounts 本地凭证解密、捕获与自动导入同步
 │   ├── openai_bridge.py   # OpenAI / Anthropic 协议与多模态双向桥接器
-│   ├── quota.py           # 实时额度/用量抓取与精确原因诊断
+│   ├── quota.py           # 实时额度/用量抓取与多方案精确解析诊断
 │   ├── oauth.py           # Z.AI / BigModel OAuth 授权登录
 │   ├── auth_admin.py      # 后台与网关密钥鉴权
 │   ├── logs.py            # 格式化彩色日志输出
@@ -217,18 +225,65 @@ docker run -d --name zcode2api \
 │   └── statics/           # 前端样式、JS 逻辑与后台页面 (accounts.html 等)
 ├── proxy/                 # 单账号交互代理模块（基于 zcode-proxy）
 │   ├── config.yaml        # 代理服务配置文件
-│   ├── account_info.py    # 本地解密凭据与实时额度看板查询脚本
+│   ├── account_info.py    # 本地解密凭据与多方案额度看板终端查询脚本
 │   └── zcode-proxy.exe    # 代理网关核心组件
 ├── captcha_node/          # 无浏览器无痕验证求解器（Node + jsdom）
 ├── main.py                # CLI 入口与服务启动调度
 ├── start.bat / start.ps1  # Windows Web 多账号集群一键启动脚本
 ├── stop.bat / stop.ps1    # Windows 一键停止脚本
-├── start_proxy.bat        # Windows 单账号交互控制台代理启动脚本
+├── start_proxy.bat        # Windows 单账号交互控制台代理启动脚本 (支持 [A] 打开 Web 后台)
 ├── requirements.txt       # Python 依赖清单
 ├── Dockerfile             # 容器镜像构建文件
 ├── docker-compose.yml     # Compose 编排文件
 └── .env.example           # 环境变量示例模板
 ```
+
+---
+
+## 📢 更新日志 (Changelog)
+
+### [v2.2.0] - 2026-09-26
+
+#### 🚀 新增特性 & 核心升级
+* **📊 额度展示全面对齐终端，支持「几亿」与「多少M」自适应显示**：
+  * **智能单位换算**：前端额度达到或超过 1 亿自动转为 `几亿`（如 `3亿/3亿`、`2.95亿`、总额度 `11.9亿`，彻底告别原先含糊生硬的 `300M` 或 `1190M`）；百万级自适应保留一位小数展示为 `多少M`（如 `0/3.0M`、`0/5.0M`、`已消耗: 4.7M`）；千级展示为 `K`。
+  * **多方案卡片分组展示**：支持同一账号同时生效的多个套餐方案（如 `[方案 1] ZCode Weekend Build`、`[方案 2] ZCode Start Plan`）卡片化分组，每个模型配额拥有独立进度条、精确到分的到期时间（`有效时间：至 YYYY-MM-DD HH:mm`）及用尽状态高亮。
+* **🔀 模型感知智能轮询与同次请求无感容灾 (Model-Aware Scheduling & Failover)**：
+  * **模型级配额感知**：调度网关细粒度检测候选账号对客户端**当前请求的具体模型**的剩余额度。若账号 A 的 `GLM-5.3` 已耗尽但 `GLM-5.3-Flash` 充裕，在请求 `GLM-5.3` 时自动避开 A 轮询到有额度的账号 B，而请求 Flash 时仍能正常利用 A 的充足配额。
+  * **同次请求无感切号**：中途遇到账号配额耗尽（HTTP 402/balance exhaust）或上游 429 限流时，同次请求在后台自动平滑重试转移至下一个健康账号，客户端流式与非流式调用均零中断。
+* **👥 智能账号去重与多凭据自动归并 (Smart Account Deduplication)**：
+  * 解决同一账号由于多次登录、不同模式（JWT / APIKey）生成多份凭证导致账号池冗余膨胀的问题。
+  * 自动基于手机号、User ID 深度合并，将多套方案与额度归集至同一账号卡片下统一管理与呈现。
+* **📦 ZCode & Z-Accounts 本地存档无缝兼容 (Z-Accounts Integration)**：
+  * 新增 `app/zcode_importer.py`，原生解析并解密 `~/.zcode/v2/credentials.json` 及 `~/.zcode-switch/accounts/*.json` 存档。
+  * 自动同步补齐 `~/.zcode/v2/config.json` 与 `~/.zcode-proxy/credentials.json`，彻底解决旧版 proxy 无法读取 config.json 的报错问题。
+  * Web 管理端提供【一键导入 Z-Accounts 本地存档】快捷操作；控制台代理提供快捷导入菜单。
+* **🖥️ 交互控制台功能重磅升级 (`start_proxy.bat`)**：
+  * 新增 `[A]` 快捷键：一键启动并直达 Web 管理后台（`http://127.0.0.1:8081/admin/accounts`）。
+  * 新增 `[M]` 快捷键：控制台内直观查看与修改后台管理密码及 Gateway API Key。
+  * 新增 `[S]` 快捷键：多账号交互式查看与手动/自动选优切换。
+  * 新增 `[P]` 快捷键：以 `serve debug` 启动原生代理，逐请求输出上游端点与诊断日志。
+
+---
+
+### [v2.1.0] - 2026-09-20
+* **🎁 套餐资格探测与自动抢领 (`auto_claim`)**：
+  * 接入全量资格探测 API，一键扫描账号池内待领取的官方限时体验包。
+  * 集成纯内存无痕人机验证求解器，后台自动完成打码抢领与额度刷新。
+* **📊 额度精确原因诊断**：
+  * 额度不可用时细化展示真实原因（如未领套餐、Token 失效、限流降级等），并提供一键修复入口。
+* **🔑 网关密钥自定义与自适应随机生成**：
+  * 默认自动初始化生成强随机 Gateway API Key，支持后台与控制台随时一键复制、修改或重新生成。
+
+---
+
+### [v2.0.0] - 2026-09-10
+* **🌐 OpenAI & Anthropic 双协议反代支持**：
+  * 完整实现 `/v1/chat/completions`、`/v1/models` 与 `/v1/messages` 原生双向协议映射。
+  * 原生支持 Base64 多模态识图与流式 Server-Sent Events (SSE)。
+* **🔀 多账号轮询与基础负载均衡**：
+  * 支持多账号池维护与 SQLite 状态持久化。
+  * 自动记录账号最后活跃时间与调用状态。
 
 ---
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -13,6 +14,7 @@ from ..models import PROVIDERS, Status
 from ..oauth import ZaiAuthFlow
 from ..quota import fetch_quota, refresh_accounts
 from ..store import store
+from ..zcode_importer import capture_and_import_live, import_all_from_local
 
 router = APIRouter(prefix="/admin/api", dependencies=[Depends(verify_admin_key)])
 
@@ -306,3 +308,36 @@ async def export_accounts():
 async def import_accounts(payload: dict = Body(...)):
     count = store.import_accounts(payload)
     return {"count": count}
+
+
+# ── 本地 ZCode 与 Z-Accounts 捕获 / 导入 ─────────────────────────────────────
+@router.post("/accounts/capture-zcode")
+async def capture_zcode_account():
+    """从本地 ZCode (或 Z-Accounts) 捕获并保存全部登录账号。"""
+    ok, msg, accs = capture_and_import_live(store)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    for a in accs:
+        asyncio.create_task(fetch_quota(a))
+    primary_view = accs[0].public_view() if accs else None
+    return {
+        "ok": True,
+        "message": msg,
+        "count": len(accs),
+        "account": primary_view,
+        "accounts": [a.public_view() for a in accs],
+    }
+
+
+@router.post("/accounts/import-zaccounts")
+async def import_zaccounts_all():
+    """扫描并导入 Z-Accounts 本地保存的全部历史账号快照。"""
+    count, names = import_all_from_local(store)
+    if count == 0:
+        return {"ok": False, "message": "未在 ~/.zcode-switch/accounts 发现已保存的账号快照", "count": 0}
+    for p in PROVIDERS:
+        for a in store.list_accounts(p):
+            if a.name in names:
+                asyncio.create_task(fetch_quota(a))
+    return {"ok": True, "count": count, "imported": names, "message": f"成功导入 {count} 个账号"}
+

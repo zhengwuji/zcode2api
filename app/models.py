@@ -53,6 +53,13 @@ class Account:
     last_error: str | None = None
     created_at: float = field(default_factory=time.time)
 
+    # 账户可读身份信息 (用于 Web 界面及控制台清晰识别归属哪个账号/手机号)
+    email: str = ""
+    phone: str = ""
+    avatar: str = ""
+    display_name: str = ""
+    user_id: str = ""
+
     @staticmethod
     def create(provider: str, name: str, secret: str) -> "Account":
         secret = (secret or "").strip()
@@ -99,6 +106,11 @@ class Account:
             "provider": self.provider,
             "mode": self.mode,
             "token_masked": masked,
+            "email": self.email,
+            "phone": self.phone,
+            "avatar": self.avatar,
+            "display_name": self.display_name,
+            "user_id": self.user_id,
             "enabled": self.enabled,
             "status": self.effective_status(),
             "quota": self.quota,
